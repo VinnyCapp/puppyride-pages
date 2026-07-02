@@ -572,10 +572,9 @@ const DELL_ORIGIN = 'https://puppyride.vinnycapp.com';
 // this Pages copy exists). When the tracker is embedded, location.origin is the iframe's
 // own origin (the Pages deploy), so this stays correct.
 const FULL_TRACKER_URL = location.origin + '/tracker.html';
-// Admin/exclusion endpoints (hide-point, unhide-all, check-password, excluded-points) live
-// on the Dell photo-server. Absolute so they work from this Pages copy when the Dell is up,
-// and simply fail (harmlessly) during an outage — admin can't run then anyway. The POSTs are
-// cross-origin, so the Dell needs a CORS preflight allowance on /photos-api.
+// Photo-server admin/exclusion endpoints. INERT on this Pages mirror — IS_PAGES gates the
+// whole admin surface off, so nothing below ever calls these. Kept only so the (unreachable)
+// handlers still reference a defined const.
 const PHOTO_API = DELL_ORIGIN + '/photos-api';
 
 // Pre-launch countdown. Jim rolls out 8:00 AM Pacific, June 6 2026. The -07:00 offset
@@ -609,10 +608,17 @@ if (_params.get('embed') === 'true') {
     catch(e) { window.open(FULL_TRACKER_URL, '_blank'); }
   }, { once: true });
 }
-// Admin chrome — gear (settings) + pencil (edit) only render with ?admin=1.
+// IS_PAGES — this build is the public Cloudflare Pages MIRROR, which is strictly VIEW-ONLY.
+// The entire admin + point-exclusion surface (settings gear, edit pencil, hide-point,
+// unhide-all, check-password, excluded-points) is gated OFF here: the chrome never renders
+// AND the handlers no-op, so no editing control can reach the public — even with ?admin=1.
+// The live Dell tracker.html has no such flag and keeps full admin.
+const IS_PAGES = true;
+// Admin chrome — gear (settings) + pencil (edit) only render with ?admin=1, and NEVER on the
+// Pages mirror (IS_PAGES forces it off even with ?admin=1).
 // CHROME-HIDING ONLY: the real gates are the Admin Access password (server-validated,
 // unlocks edit mode) and the server-side PHOTO_PASSWORD on every destructive endpoint.
-const ADMIN_CHROME = _params.has('admin');
+const ADMIN_CHROME = _params.has('admin') && !IS_PAGES;
 // Photo/admin password, cached for the session once validated server-side.
 let photoPassword = sessionStorage.getItem('puppyride_photo_pw') || '';
 
@@ -1177,6 +1183,7 @@ function hidePoint(trackerId, unixTime, lat, lng) {
 // Server-side point removal — strips a bad SPOT point from jim.json for EVERY
 // viewer (photo-server records the exclusion; cache.js keeps it removed on each poll).
 async function removePointServer(trackerId, unixTime, lat, lng) {
+  if (IS_PAGES) return;   // view-only Pages mirror — server-side exclusion disabled
   if (!confirm('Remove this SPOT point for ALL viewers? It will be permanently filtered out of the public track.')) return;
   let pw = photoPassword || sessionStorage.getItem('puppyride_photo_pw') || '';
   if (!pw) { pw = prompt('Admin password to remove this point:') || ''; if (!pw) return; }
@@ -1198,6 +1205,7 @@ async function removePointServer(trackerId, unixTime, lat, lng) {
 }
 
 async function clearHiddenPoints() {
+  if (IS_PAGES) return;   // view-only Pages mirror
   // Legacy per-device hides (localStorage)
   hiddenPoints={};
   localStorage.setItem('hiddenPoints',JSON.stringify(hiddenPoints));
@@ -1262,6 +1270,7 @@ function toggleAdminPwVisibility() {
 // so the edit-mode password never ships in the page source AND the same validated
 // password authorizes the server-side point-removal calls below.
 async function confirmAdminPw() {
+  if (IS_PAGES) return;   // view-only Pages mirror — admin unlock disabled
   const input = document.getElementById('adminPwInput');
   const err = document.getElementById('adminError');
   const btn = document.querySelector('.btn-admin-confirm');
@@ -1290,6 +1299,7 @@ async function confirmAdminPw() {
 }
 
 function toggleEditMode() {
+  if (IS_PAGES) return;   // view-only Pages mirror — edit mode disabled
   editMode = !editMode;
   document.getElementById('editBanner').classList.toggle('visible', editMode);
   // Update pencil button style
@@ -1877,6 +1887,7 @@ function updateInfoPanel(trackerId) {
 // CONFIG
 // =============================================
 function openConfig() {
+  if (IS_PAGES) return;   // view-only Pages mirror — settings/exclusion panel disabled (also skips the excluded-points fetch)
   const c=document.getElementById('configFields');
   c.innerHTML=TRACKERS.map(t=>`<label>${t.name} — SPOT Feed ID</label><input type="text" id="cfg_${t.id}" value="${t.feedId}" placeholder="e.g. 0onlLopfoM4bG5jXvWRE8H0Obd0oMxMBq">`).join('');
   document.getElementById('gpxUrlInput').value=localStorage.getItem('gpxUrl')||'';
