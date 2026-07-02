@@ -572,7 +572,11 @@ const DELL_ORIGIN = 'https://puppyride.vinnycapp.com';
 // this Pages copy exists). When the tracker is embedded, location.origin is the iframe's
 // own origin (the Pages deploy), so this stays correct.
 const FULL_TRACKER_URL = location.origin + '/tracker.html';
-const PHOTO_API = '/photos-api';
+// Admin/exclusion endpoints (hide-point, unhide-all, check-password, excluded-points) live
+// on the Dell photo-server. Absolute so they work from this Pages copy when the Dell is up,
+// and simply fail (harmlessly) during an outage — admin can't run then anyway. The POSTs are
+// cross-origin, so the Dell needs a CORS preflight allowance on /photos-api.
+const PHOTO_API = DELL_ORIGIN + '/photos-api';
 
 // Pre-launch countdown. Jim rolls out 8:00 AM Pacific, June 6 2026. The -07:00 offset
 // (PDT) is explicit so the countdown is correct for viewers in any timezone. The overlay
