@@ -1,0 +1,2138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PuppyRide — Live Tracker</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/2.1.2/gpx.min.js"></script>
+<!-- protomaps-leaflet 5.1.0 (vendored): renders the self-hosted Protomaps vector PMTiles
+     basemap as a Leaflet layer, so all existing marker/trail/follow/embed code is untouched. -->
+<script src="protomaps-leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Work+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal: #1abc9c;
+    --teal-dark: #16a085;
+    --teal-glow: rgba(26,188,156,0.35);
+    --bg: #0f1215;
+    --bg-card: rgba(18,22,27,0.92);
+    --bg-card-border: rgba(26,188,156,0.15);
+    --text: #e8e6e1;
+    --text-dim: #7a7d82;
+    --text-muted: #4a4d52;
+    --accent-warm: #e8a847;
+    --accent-red: #e85547;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --radius: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Work Sans',sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; }
+  #map { position:absolute; inset:0; z-index:1; }
+
+  .leaflet-control-attribution { display:none !important; }
+  .leaflet-control-zoom { border:none !important; box-shadow:var(--shadow) !important; }
+  .leaflet-control-zoom a { background:var(--bg-card) !important; color:var(--text) !important; border:1px solid var(--bg-card-border) !important; width:36px !important; height:36px !important; line-height:36px !important; font-size:16px !important; }
+  .leaflet-control-zoom a:hover { background:rgba(26,188,156,0.15) !important; color:var(--teal) !important; }
+
+  .header { position:absolute; top:0; left:0; right:0; z-index:1000; display:flex; align-items:center; justify-content:space-between; padding:16px 20px 48px; background:linear-gradient(to bottom,rgba(15,18,21,0.95) 0%,rgba(15,18,21,0.75) 55%,transparent 100%); pointer-events:none; }
+  .header > * { pointer-events:auto; }
+  /* Top-left site logo (PuppyRide) — teal art on transparent bg, reads on the dark header. */
+  .brand { display:flex; align-items:center; text-decoration:none; }
+  .brand-pr-logo { height:46px; width:auto; display:block; transition:transform 0.2s; }
+  .brand:hover .brand-pr-logo { transform:translateY(-1px); }
+  /* Bottom "Tracking powered by" credit + Happily Running logo (in the status bar). */
+  .status-brand { display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .status-brand-label { font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); font-weight:500; white-space:nowrap; }
+  .status-brand-logo { height:22px; width:auto; display:block; background:#fff; padding:3px 7px; border-radius:6px; box-shadow:0 1px 6px rgba(0,0,0,0.3); }
+
+  .live-badge { display:flex; align-items:center; gap:8px; background:rgba(26,188,156,0.1); border:1px solid rgba(26,188,156,0.25); border-radius:20px; padding:6px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--teal); letter-spacing:1px; text-transform:uppercase; }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--teal); animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 var(--teal-glow)} 50%{opacity:0.6;box-shadow:0 0 0 6px transparent} }
+
+  .controls-row { position:absolute; top:76px; left:50%; transform:translateX(-50%); z-index:1000; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  .toggle-pill { display:flex; gap:4px; background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:28px; padding:4px; backdrop-filter:blur(16px); box-shadow:var(--shadow); }
+  .toggle-btn { font-family:'Work Sans',sans-serif; font-size:12px; font-weight:600; color:var(--text-dim); background:transparent; border:none; border-radius:24px; padding:8px 16px; cursor:pointer; transition:all 0.25s; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .toggle-btn:hover { color:var(--text); }
+  .toggle-btn.active { background:var(--teal); color:#fff; box-shadow:0 0 16px var(--teal-glow); }
+  .toggle-btn .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .toggle-btn svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+  .icon-btn { background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:50%; width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-dim); transition:all 0.2s; backdrop-filter:blur(12px); }
+  .icon-btn:hover { color:var(--teal); border-color:var(--teal); }
+  .icon-btn svg { width:16px; height:16px; }
+
+  /* ---- BOTTOM PANEL ---- */
+  .info-panel { position:absolute; bottom:0; left:0; right:0; z-index:1000; padding:0 16px 20px; pointer-events:none; background:linear-gradient(to top,rgba(15,18,21,0.95) 0%,rgba(15,18,21,0.7) 60%,transparent 100%); }
+  .info-panel > * { pointer-events:auto; }
+
+  /* Elevation profile strip — same translucent card treatment as the metric tiles so the
+     strip + tiles read as one floating unit over the map. pointer-events:none keeps it
+     passive (map pan/zoom at the bottom edge passes straight through; the canvas has no
+     hover/tap handlers). Sits as the first child of .info-panel, directly above the tiles. */
+  .elev-strip { position:relative; height:90px; margin-bottom:8px; background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:var(--radius); backdrop-filter:blur(16px); overflow:hidden; pointer-events:none; transition:height 0.25s ease; }
+  .elev-strip.collapsed { height:12px; }   /* sliver — keeps the colored split + position dot only */
+  .elev-strip canvas { display:block; width:100%; height:100%; }
+  /* The ONLY interactive element on the strip (rest stays pointer-events:none so map gestures
+     pass through). Full-height tap target on the right so it's hittable in both states. */
+  .elev-toggle { position:absolute; top:0; right:0; height:100%; width:34px; display:flex; align-items:center; justify-content:center; background:none; border:none; padding:0; cursor:pointer; color:var(--text-dim); pointer-events:auto; transition:color 0.2s; }
+  .elev-toggle:hover { color:var(--teal); }
+  .elev-toggle svg { width:13px; height:13px; transition:transform 0.25s ease; }
+  .elev-strip.collapsed .elev-toggle svg { transform:rotate(180deg); }
+
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px; }
+  .stat-card { background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:var(--radius); padding:10px 8px; backdrop-filter:blur(16px); text-align:center; }
+  .stat-card .label { font-family:'IBM Plex Mono',monospace; font-size:8px; font-weight:500; color:var(--text-muted); letter-spacing:1.2px; text-transform:uppercase; margin-bottom:3px; }
+  .stat-card .value { font-family:'Archivo Black',sans-serif; font-size:16px; color:var(--text); }
+  .stat-card .unit { font-size:9px; color:var(--text-dim); font-weight:500; }
+  .stat-card.accent .value { color:var(--teal); }
+
+  /* Mobile-only compact stats summary (collapsed full breakdown). Hidden on desktop —
+     only the @media (max-width:600px) block below reveals it, so desktop is unchanged. */
+  .stats-compact { display:none; align-items:center; justify-content:space-between; gap:12px; width:100%; margin-bottom:8px; padding:11px 16px; background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:var(--radius); backdrop-filter:blur(16px); cursor:pointer; text-align:left; font-family:'Work Sans',sans-serif; }
+  .stats-compact-summary { display:flex; align-items:baseline; gap:6px; font-size:13px; color:var(--text-dim); }
+  .stats-compact-num { font-family:'Archivo Black',sans-serif; font-size:16px; color:var(--teal); }
+  .stats-compact-lbl { font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted); }
+  .stats-compact-sep { color:var(--text-muted); }
+  .stats-caret { font-size:11px; line-height:1; color:var(--text-dim); transition:transform 0.2s; }
+  .info-panel.stats-open .stats-caret { transform:rotate(90deg); }
+
+  .progress-row { margin-bottom:8px; }
+  .progress-bar-wrap { background:rgba(255,255,255,0.06); border-radius:6px; height:8px; overflow:hidden; position:relative; }
+  .progress-bar-fill { height:100%; border-radius:6px; background:linear-gradient(90deg,var(--teal),var(--accent-warm)); transition:width 0.6s ease; }
+  .progress-label { display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-muted); margin-top:4px; letter-spacing:0.5px; }
+
+  .status-bar { display:flex; align-items:center; justify-content:space-between; background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:var(--radius); padding:10px 16px; backdrop-filter:blur(16px); }
+  .status-bar .status-text { font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:8px; }
+  .status-bar .status-text strong { color:var(--text); font-weight:600; }
+  .status-bar .last-update { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-muted); }
+  .battery { display:flex; align-items:center; gap:4px; font-family:'IBM Plex Mono',monospace; font-size:11px; }
+  .battery.good { color:var(--teal); }
+  .battery.low { color:var(--accent-warm); }
+  .battery.critical { color:var(--accent-red); }
+
+  /* Auto-refresh countdown — sits to the left of LIVE and mirrors the LIVE badge's
+     font/color (IBM Plex Mono, teal). Updating/failed swap to gold/red to signal. */
+  .refresh-status { font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--teal); white-space:nowrap; transition:color 0.3s; }
+  .refresh-status[data-state="updating"] { color:var(--accent-warm); }
+  .refresh-status[data-state="failed"] { color:var(--accent-red); }
+
+  /* ---- PRE-LAUNCH COUNTDOWN ---- */
+  .countdown-overlay { position:absolute; inset:0; z-index:1500; display:none; align-items:center; justify-content:center; pointer-events:none; padding:80px 16px; }
+  .countdown-overlay.visible { display:flex; }
+  .countdown-card { background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:18px; padding:24px 30px; backdrop-filter:blur(16px); box-shadow:var(--shadow); text-align:center; pointer-events:auto; }
+  .countdown-flag { display:flex; align-items:center; justify-content:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--teal); margin-bottom:16px; }
+  .countdown-units { display:flex; gap:10px; justify-content:center; }
+  .cd-unit { min-width:62px; background:rgba(255,255,255,0.04); border:1px solid var(--bg-card-border); border-radius:12px; padding:10px 6px; }
+  .cd-num { font-family:'Archivo Black',sans-serif; font-size:36px; line-height:1; color:var(--text); font-variant-numeric:tabular-nums; }
+  .cd-unit:last-child .cd-num { color:var(--accent-warm); }
+  .cd-lbl { font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); margin-top:8px; }
+  .countdown-when { margin-top:18px; font-family:'Work Sans',sans-serif; font-size:13px; font-weight:600; color:var(--text-dim); }
+  body.embed-mode .countdown-overlay { display:none !important; }
+  @media (max-width:600px) {
+    .countdown-units { gap:7px; }
+    .cd-unit { min-width:52px; padding:8px 4px; }
+    .cd-num { font-size:28px; }
+  }
+
+  /* ---- MAP STYLE PICKER ---- */
+  /* z-index 1010 (not 1000): the info-panel is a LATER sibling at z-index:1000, so at equal
+     z it paints over this control and its full-width children (progress-row) swallow clicks. */
+  /* These bottom-anchored floating controls must clear the info-panel, whose height varies by
+     viewport (desktop shows 4 stat cards; mobile a compact bar) AND by the elevation strip's
+     collapsed/expanded height. Hardcoded offsets can't track that, so JS (layoutFloatingControls)
+     measures the live panel height into --panel-clear; each control sits just above it. Fallback
+     keeps a sane expanded default before JS runs. Transition matches the strip's height animation
+     so the stack slides with it. */
+  .map-style-picker { position:absolute; bottom:calc(var(--panel-clear,232px) + 56px); right:16px; z-index:1010; display:none; flex-direction:column; gap:4px; background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:var(--radius); padding:8px; backdrop-filter:blur(16px); box-shadow:var(--shadow); transition:bottom 0.25s ease; }
+  .map-style-picker.open { display:flex; }
+  .map-style-opt { font-family:'Work Sans',sans-serif; font-size:11px; font-weight:500; color:var(--text-dim); background:none; border:none; padding:8px 14px; border-radius:8px; cursor:pointer; text-align:left; transition:all 0.15s; white-space:nowrap; }
+  .map-style-opt:hover { background:rgba(255,255,255,0.06); color:var(--text); }
+  .map-style-opt.active { background:var(--teal); color:#fff; }
+  .map-style-btn { position:absolute; bottom:calc(var(--panel-clear,232px) + 14px); right:16px; z-index:1010; transition:bottom 0.25s ease; }
+
+  /* ---- BOTTOM-LEFT STACK: Donate + Legend ---- */
+  .corner-stack { position:absolute; bottom:calc(var(--panel-clear,232px) + 16px); left:16px; z-index:1000; display:flex; flex-direction:column; gap:8px; width:178px; max-width:calc(100vw - 32px); transition:bottom 0.25s ease; }
+  .corner-cta { display:flex; align-items:center; justify-content:center; gap:7px; text-decoration:none; font-family:'Work Sans',sans-serif; font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; padding:10px 12px; border-radius:var(--radius); box-shadow:var(--shadow); transition:all 0.2s; backdrop-filter:blur(16px); }
+  .corner-cta svg { width:14px; height:14px; flex-shrink:0; }
+  .corner-cta.donate { background:linear-gradient(135deg,var(--accent-warm),#d4912f); color:#1a1205; border:1px solid rgba(232,168,71,0.5); }
+  .corner-cta.donate:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(232,168,71,0.4); }
+
+  .legend { background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:var(--radius); padding:10px 12px; backdrop-filter:blur(16px); box-shadow:var(--shadow); }
+  .legend-row { display:flex; align-items:center; gap:9px; font-size:11px; color:var(--text-dim); font-weight:500; line-height:1.3; }
+  .legend-row + .legend-row { margin-top:6px; }
+  .legend-swatch { width:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .lg-dot { width:13px; height:13px; border-radius:50%; background:var(--accent-warm); border:2px solid #fff; box-shadow:0 0 6px rgba(232,168,71,0.5); }
+  .lg-photo { width:14px; height:14px; border-radius:3px; border:2px solid #fff; background:linear-gradient(135deg,#3a4a5a,#222); }
+  .lg-blog { width:15px; height:15px; border-radius:50%; background:var(--teal); border:2px solid #fff; display:flex; align-items:center; justify-content:center; font-size:8px; line-height:1; }
+  .lg-line { width:16px; height:0; border-top:3px solid var(--accent-warm); border-radius:2px; }
+  /* Remaining route: soft-blue base with a lighter dashed cap (mirrors the stacked map line). */
+  .lg-line.dashed { border-top:3px solid #4A90D2; border-radius:2px; position:relative; }
+  .lg-line.dashed::after { content:''; position:absolute; left:0; right:0; top:-3px; border-top:2px dashed #BFD8F5; }
+
+  /* Legend accordion — collapsed by default (matters most on mobile); tap header to toggle. */
+  .legend-header { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; background:none; border:none; padding:0; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:8px; font-weight:600; color:var(--text-muted); letter-spacing:1.5px; text-transform:uppercase; }
+  .legend-caret { font-size:9px; line-height:1; color:var(--text-dim); transition:transform 0.2s; }
+  .legend.open .legend-caret { transform:rotate(90deg); }
+  .legend-body { display:none; margin-top:8px; }
+  .legend.open .legend-body { display:block; }
+
+  body.embed-mode .corner-stack { display:none; }
+
+  /* ---- CONFIG MODAL ---- */
+  .config-overlay { display:none; position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.6); backdrop-filter:blur(6px); align-items:center; justify-content:center; }
+  .config-overlay.open { display:flex; }
+  .config-modal { background:#1a1e24; border:1px solid var(--bg-card-border); border-radius:16px; padding:28px; width:min(420px,90vw); box-shadow:0 16px 60px rgba(0,0,0,0.5); max-height:90vh; overflow-y:auto; }
+  .config-modal h2 { font-family:'Archivo Black',sans-serif; font-size:16px; margin-bottom:6px; }
+  .config-modal h3 { font-size:13px; font-weight:600; color:var(--teal); margin:16px 0 8px; text-transform:uppercase; letter-spacing:1px; }
+  .config-modal p { font-size:13px; color:var(--text-dim); margin-bottom:16px; }
+  .config-modal label { font-size:11px; font-weight:600; color:var(--text-dim); letter-spacing:1px; text-transform:uppercase; display:block; margin-bottom:6px; }
+  .config-modal input, .config-modal textarea { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--text); margin-bottom:12px; outline:none; transition:border-color 0.2s; }
+  .config-modal input:focus, .config-modal textarea:focus { border-color:var(--teal); }
+  .config-modal input::placeholder, .config-modal textarea::placeholder { color:var(--text-muted); }
+  .config-modal textarea { min-height:80px; resize:vertical; }
+  .config-actions { display:flex; gap:10px; margin-top:12px; }
+  .config-actions button { flex:1; font-family:'Work Sans',sans-serif; font-size:13px; font-weight:600; padding:10px; border-radius:8px; border:none; cursor:pointer; transition:all 0.2s; }
+  .btn-primary { background:var(--teal); color:#fff; }
+  .btn-primary:hover { background:var(--teal-dark); }
+  .btn-secondary { background:rgba(255,255,255,0.06); color:var(--text-dim); border:1px solid rgba(255,255,255,0.1) !important; }
+  .btn-secondary:hover { color:var(--text); background:rgba(255,255,255,0.1); }
+  .btn-danger { background:rgba(232,85,71,0.15); color:var(--accent-red); border:1px solid rgba(232,85,71,0.25) !important; }
+  .btn-danger:hover { background:rgba(232,85,71,0.25); }
+
+  /* ---- ADMIN PASSWORD MODAL ---- */
+  .admin-overlay { display:none; position:fixed; inset:0; z-index:3000; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); align-items:center; justify-content:center; }
+  .admin-overlay.open { display:flex; }
+  .admin-modal { background:#1a1e24; border:1px solid rgba(232,85,71,0.25); border-radius:16px; padding:32px; width:min(360px,90vw); box-shadow:0 16px 60px rgba(0,0,0,0.6); }
+  .admin-modal-header { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  .admin-modal-icon { width:36px; height:36px; background:rgba(232,85,71,0.15); border:1px solid rgba(232,85,71,0.3); border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .admin-modal-icon svg { width:18px; height:18px; stroke:var(--accent-red); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .admin-modal h2 { font-family:'Archivo Black',sans-serif; font-size:16px; color:var(--text); }
+  .admin-modal p { font-size:13px; color:var(--text-dim); margin-bottom:20px; line-height:1.5; }
+  .admin-modal label { font-size:11px; font-weight:600; color:var(--text-dim); letter-spacing:1px; text-transform:uppercase; display:block; margin-bottom:8px; }
+  .admin-pw-wrap { position:relative; margin-bottom:8px; }
+  .admin-pw-wrap input { width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:12px 44px 12px 14px; font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--text); outline:none; transition:border-color 0.2s; }
+  .admin-pw-wrap input:focus { border-color:rgba(232,85,71,0.5); }
+  .admin-pw-wrap input.shake { animation:shake 0.4s ease; border-color:var(--accent-red) !important; }
+  .admin-pw-toggle { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text-muted); padding:4px; transition:color 0.2s; }
+  .admin-pw-toggle:hover { color:var(--text); }
+  .admin-pw-toggle svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .admin-error { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--accent-red); margin-bottom:16px; min-height:16px; transition:opacity 0.2s; }
+  .admin-error.hidden { opacity:0; }
+  .admin-modal-actions { display:flex; gap:10px; }
+  .admin-modal-actions button { flex:1; font-family:'Work Sans',sans-serif; font-size:13px; font-weight:600; padding:11px; border-radius:8px; border:none; cursor:pointer; transition:all 0.2s; }
+  .btn-admin-confirm { background:var(--accent-red); color:#fff; }
+  .btn-admin-confirm:hover { background:#d44438; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+
+  /* Edit mode banner */
+  .edit-banner { display:none; position:absolute; top:120px; left:50%; transform:translateX(-50%); z-index:1001; background:rgba(232,85,71,0.9); color:#fff; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; padding:8px 20px; border-radius:20px; letter-spacing:1px; cursor:pointer; }
+  .edit-banner.visible { display:block; }
+
+  /* Leaflet popup */
+  .leaflet-popup-content-wrapper { background:var(--bg-card) !important; border:1px solid var(--bg-card-border) !important; color:var(--text) !important; border-radius:10px !important; box-shadow:var(--shadow) !important; }
+  .leaflet-popup-tip { background:var(--bg-card) !important; }
+  .leaflet-popup-content { font-family:'Work Sans',sans-serif !important; font-size:12px !important; color:var(--text) !important; margin:10px 14px !important; }
+  .popup-delete-btn { background:rgba(232,85,71,0.2); color:var(--accent-red); border:1px solid rgba(232,85,71,0.3); border-radius:6px; padding:4px 10px; font-size:10px; font-weight:600; cursor:pointer; margin-top:6px; font-family:'Work Sans',sans-serif; }
+  .popup-delete-btn:hover { background:rgba(232,85,71,0.35); }
+
+  /* ---- EMBED MODE ---- */
+  body.embed-mode .header { display:none; }
+  body.embed-mode #uploadBtn { display:none; }
+  body.embed-mode .controls-row { display:none; }
+  body.embed-mode .map-style-btn { display:none; }
+  body.embed-mode .map-style-picker { display:none !important; }
+  body.embed-mode .config-overlay { display:none !important; }
+  body.embed-mode .edit-banner { display:none !important; }
+  body.embed-mode .info-panel { padding:0 12px 12px; }
+  body.embed-mode .elev-strip { display:none; }
+  body.embed-mode .stats-row { display:none; }
+  body.embed-mode .progress-row { display:none; }
+  body.embed-mode .stats-compact { display:none !important; }
+  body.embed-mode .refresh-status { display:none; }
+  body.embed-mode #full-tracker-link { display:none !important; }
+
+  /* Embed status bar — slim */
+  .embed-bar { display:none; position:absolute; top:12px; left:12px; right:12px; z-index:1000; background:var(--bg-card); border:1px solid var(--bg-card-border); border-radius:var(--radius); padding:10px 14px; backdrop-filter:blur(16px); align-items:center; justify-content:space-between; }
+  body.embed-mode .embed-bar { display:flex; }
+  .embed-bar-left { display:flex; align-items:center; gap:10px; }
+  .embed-bar-brand { font-family:'Archivo Black',sans-serif; font-size:13px; color:var(--text); }
+  .embed-bar-status { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-muted); }
+  .embed-full-btn { font-family:'Work Sans',sans-serif; font-size:11px; font-weight:700; color:#fff; background:var(--teal); border:none; border-radius:20px; padding:6px 14px; cursor:pointer; letter-spacing:0.5px; text-decoration:none; white-space:nowrap; transition:background 0.2s; }
+  .embed-full-btn:hover { background:var(--teal-dark); }
+
+  /* ---- ?embed=1 STRIPPED VIEW (Wix mobile iframe) ----
+     Additive + gated on the `embed` body class — zero effect on normal or legacy-embed loads.
+     The map (#map) is already full-bleed (position:absolute; inset:0), so we only strip the
+     frame chrome that wastes space in a ~301×526 iframe and keep: map, the LIVE/next-update
+     freshness chip, the collapsed Legend accordion, and the compact stats bar. */
+  body.embed { height:100dvh; }
+  /* Embed CLICK-TO-ACTIVATE: until the user taps the map, touch gestures must PASS THROUGH
+     to the parent (Wix) page so it scrolls past the embed normally. So NO touch-action:none
+     and NO touchmove-preventDefault here — Leaflet's interaction handlers are disabled in JS
+     on load and only re-enabled after the user taps the "Tap to interact" overlay. Scoped to
+     .embed only — the normal full tracker is untouched. */
+  html.embed, body.embed { height:100%; margin:0; padding:0; overflow:hidden; overscroll-behavior:none; }
+  body.embed { height:100dvh; }                          /* viewport-exact (overrides 100% above) */
+  body.embed #map { position:absolute; inset:0; width:100%; height:100%; }
+  /* Once activated, the map owns its gestures (smooth pan/pinch without the browser also scrolling). */
+  body.embed.embed-activated #map { touch-action:none; }
+  /* "Tap to interact" activation overlay (embed only). Lives INSIDE #map (z-index:1 stacking
+     context), so it covers the tiles + zoom control but stays BELOW the root-level UI
+     (header/info-panel/donate at z-index:1000) — those remain tappable. */
+  .embed-activate-overlay { position:absolute; inset:0; z-index:1200; display:flex; align-items:center; justify-content:center; background:rgba(15,18,21,0.14); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .embed-activate-pill { font-family:'Work Sans',sans-serif; font-size:13px; font-weight:700; letter-spacing:0.4px; color:#fff; background:rgba(15,18,21,0.72); border:1px solid var(--teal); border-radius:22px; padding:9px 18px; display:flex; align-items:center; gap:8px; box-shadow:0 4px 18px rgba(0,0,0,0.35); }
+  .embed-activate-pill::before { content:''; width:9px; height:9px; border-radius:50%; background:var(--teal); box-shadow:0 0 0 4px rgba(26,188,156,0.25); }
+  body.embed .header .brand { display:none; }          /* hide PuppyRide title/logo band... */
+  body.embed .header { justify-content:flex-end; padding:10px 14px 28px; }  /* ...keep LIVE + "next update" chip, slimmer */
+  body.embed .status-bar { display:none; }              /* "tracking powered by Happily Running" branding footer + battery/last-update */
+  body.embed .controls-row { display:none; }             /* tracker toggle row (single-tracker anyway) */
+  body.embed .map-style-btn { display:none; }            /* map-style layers button... */
+  body.embed .map-style-picker { display:none !important; }   /* ...and its picker */
+  body.embed .legend { display:none; }                   /* drop the Legend in embed (corner-stack left empty)... */
+  body.embed .info-panel .corner-cta.donate { margin-bottom:8px; }  /* ...Donate is relocated (via JS) to hug the top of the stats bar */
+
+  @media (max-width:600px) {
+    .header { padding:12px 14px 40px; }
+    .brand-pr-logo { height:38px; }
+    .status-bar { flex-wrap:wrap; gap:8px 12px; }
+    .status-brand-label { font-size:8px; letter-spacing:0.8px; }
+    .status-brand-logo { height:20px; padding:3px 6px; }
+    .live-badge { font-size:10px; padding:5px 10px; }
+    .icon-btn { width:32px; height:32px; }
+    .icon-btn svg { width:15px; height:15px; }
+    .controls-row { top:64px; width:95%; }
+    .toggle-btn { font-size:11px; padding:7px 12px; }
+    .stats-row { grid-template-columns:repeat(2,1fr); }
+    .stat-card .value { font-size:14px; }
+    /* Mobile: collapse the cluttered full breakdown to a compact summary by default.
+       The compact bar is the toggle; .stats-open reveals progress bar + the 4 stat cards.
+       Values stay bound to live data — this only hides/shows, never freezes. */
+    .stats-compact { display:flex; }
+    .info-panel:not(.stats-open) .progress-row,
+    .info-panel:not(.stats-open) .stats-row { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- EMBED BAR (only visible in embed mode) -->
+<div class="embed-bar">
+  <div class="embed-bar-left">
+    <div class="live-badge" id="embedLiveBadge" style="padding:4px 10px;font-size:10px;">
+      <div class="live-dot"></div>
+      <span id="embedLiveLabel">LIVE</span>
+    </div>
+    <div>
+      <div class="embed-bar-brand">Puppy Ride Coast to Coast</div>
+      <div class="embed-bar-status" id="embedStatusText">Loading...</div>
+    </div>
+  </div>
+  <a id="full-tracker-link" class="embed-full-btn" href="https://puppyride.vinnycapp.com/tracker.html" target="_blank">Full Tracker →</a>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <a class="brand" href="index.html" title="PuppyRide Long Island">
+    <img class="brand-pr-logo" src="puppyride-logo.png" alt="PuppyRide Long Island" width="338" height="338">
+  </a>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <!-- Quiet auto-refresh status line, to the left of LIVE. Single REFRESH_INTERVAL_MS drives poll + countdown. -->
+    <div class="refresh-status" id="refreshCountdown" data-state="idle">Next update in 1:00</div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <span id="liveLabel">LIVE</span>
+    </div>
+    <button class="icon-btn" id="editBtn" onclick="requestEditMode()" title="Edit points (admin)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    </button>
+    <button class="icon-btn" id="settingsBtn" onclick="openConfig()" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- EDIT MODE BANNER -->
+<div class="edit-banner" id="editBanner" onclick="toggleEditMode()">✏️ EDIT MODE — Click points to remove them &nbsp;·&nbsp; Click to exit</div>
+
+<!-- CONTROLS (Live/History toggle removed 2026-06-02 — single view: full track + current
+     position. #trackerToggle stays for the multi-tracker case but is hidden when solo.) -->
+<div class="controls-row">
+  <div class="toggle-pill" id="trackerToggle"></div>
+</div>
+
+<!-- MAP STYLE BUTTON (no inline onclick — handled by the delegated document listener) -->
+<button class="icon-btn map-style-btn" title="Map style">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+</button>
+
+<!-- MAP STYLE PICKER -->
+<div class="map-style-picker" id="stylePicker"></div>
+
+<!-- INFO PANEL -->
+<div class="info-panel" id="infoPanel">
+  <!-- Elevation profile strip — passive (no interaction), floats directly above the metric
+       tiles. Fill split = traveled (gold) vs remaining (soft-blue), boundary + dot driven by
+       the SAME progress fraction as the bar below (renderElevation called from updateStats). -->
+  <div class="elev-strip" id="elevStrip">
+    <canvas id="elevCanvas"></canvas>
+    <button class="elev-toggle" id="elevToggle" onclick="toggleElev()" aria-label="Collapse elevation profile" aria-expanded="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+  </div>
+  <!-- Mobile-only compact summary + toggle. On phones the full breakdown is collapsed by
+       default; this shows just completed mi + %, and the caret expands the rest. Hidden on
+       desktop (and in embed mode) via CSS — desktop stays fully expanded as before. -->
+  <button class="stats-compact" id="statsCompact" onclick="toggleStats()" aria-expanded="false">
+    <span class="stats-compact-summary">
+      <span class="stats-compact-num" id="statCompactCompleted">--</span> mi
+      <span class="stats-compact-lbl">completed</span>
+      <span class="stats-compact-sep">·</span>
+      <span class="stats-compact-num" id="statCompactPct">--%</span>
+    </span>
+    <span class="stats-caret">▸</span>
+  </button>
+  <div class="progress-row">
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+    </div>
+    <div class="progress-label">
+      <span id="progressText">--</span>
+      <span id="progressPct">--%</span>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="label">Total Route</div>
+      <div class="value" id="statTotal">--</div>
+      <div class="unit">mi</div>
+    </div>
+    <div class="stat-card accent">
+      <div class="label">Completed</div>
+      <div class="value" id="statCompleted">--</div>
+      <div class="unit">mi</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Today</div>
+      <div class="value" id="statToday">--</div>
+      <div class="unit">mi</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Remaining</div>
+      <div class="value" id="statRemaining">--</div>
+      <div class="unit">mi</div>
+    </div>
+  </div>
+  <div class="status-bar">
+    <a class="status-brand" href="https://www.happilyrunning.com" target="_blank" rel="noopener" title="Tracking powered by Happily Running">
+      <span class="status-brand-label">Tracking powered by</span>
+      <img class="status-brand-logo" src="hr-logo-lockup.png" alt="Happily Running" width="720" height="260">
+    </a>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="battery good" id="batteryDisplay">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="20" y="10" width="2" height="4" fill="currentColor"/><rect x="5" y="9" width="12" height="6" rx="1" fill="currentColor" opacity="0.5"/></svg>
+        <span id="batteryText">GOOD</span>
+      </div>
+      <div class="last-update" id="lastUpdate">--</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM-LEFT STACK: Donate (top) · Legend (bottom) -->
+<div class="corner-stack">
+  <a class="corner-cta donate" href="https://seeingeye.donorsupport.co/page/puppyride2025" target="_blank" rel="noopener" title="Support The Seeing Eye">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    Donate
+  </a>
+  <div class="legend" id="legend">
+    <button class="legend-header" id="legendHeader" onclick="toggleLegend()" aria-expanded="false">
+      <span class="legend-header-label">Legend</span>
+      <span class="legend-caret">▸</span>
+    </button>
+    <div class="legend-body">
+      <div class="legend-row"><span class="legend-swatch"><span class="lg-dot"></span></span>Current location</div>
+      <div class="legend-row"><span class="legend-swatch"><span class="lg-photo"></span></span>Photo</div>
+      <div class="legend-row"><span class="legend-swatch"><span class="lg-blog">📖</span></span>Blog post</div>
+      <div class="legend-row"><span class="legend-swatch"><span class="lg-line"></span></span>Completed</div>
+      <div class="legend-row"><span class="legend-swatch"><span class="lg-line dashed"></span></span>Remaining</div>
+    </div>
+  </div>
+</div>
+
+<!-- PRE-LAUNCH COUNTDOWN (auto-hides at ride start) -->
+<div class="countdown-overlay" id="countdownOverlay">
+  <div class="countdown-card">
+    <div class="countdown-flag"><span class="live-dot"></span>Puppy Ride Coast to Coast begins in</div>
+    <div class="countdown-units">
+      <div class="cd-unit"><div class="cd-num" id="cdDays">--</div><div class="cd-lbl">Days</div></div>
+      <div class="cd-unit"><div class="cd-num" id="cdHours">--</div><div class="cd-lbl">Hrs</div></div>
+      <div class="cd-unit"><div class="cd-num" id="cdMins">--</div><div class="cd-lbl">Min</div></div>
+      <div class="cd-unit"><div class="cd-num" id="cdSecs">--</div><div class="cd-lbl">Sec</div></div>
+    </div>
+    <div class="countdown-when" id="countdownWhen"></div>
+  </div>
+</div>
+
+<!-- CONFIG MODAL -->
+<div class="config-overlay" id="configOverlay">
+  <div class="config-modal">
+    <h2>Tracker Settings</h2>
+    <p>Configure SPOT feeds and GPX route file.</p>
+    <h3>SPOT Feeds</h3>
+    <div id="configFields"></div>
+    <h3>GPX Route</h3>
+    <label>Load GPX file</label>
+    <input type="file" id="gpxFileInput" accept=".gpx" style="padding:8px;">
+    <label>Or paste GPX URL</label>
+    <input type="text" id="gpxUrlInput" placeholder="https://example.com/route.gpx">
+    <label>Or set total route distance manually (miles)</label>
+    <input type="number" id="manualDistInput" placeholder="e.g. 3400" step="1">
+    <h3>Hidden Points</h3>
+    <p id="hiddenCount" style="font-size:12px;">0 points hidden</p>
+    <button class="btn-danger" onclick="clearHiddenPoints()" style="width:auto;padding:6px 14px;font-size:11px;">Restore All Hidden Points</button>
+    <div class="config-actions">
+      <button class="btn-secondary" onclick="closeConfig()">Cancel</button>
+      <button class="btn-primary" onclick="saveConfig()">Save &amp; Reload</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN PASSWORD MODAL -->
+<div class="admin-overlay" id="adminOverlay">
+  <div class="admin-modal">
+    <div class="admin-modal-header">
+      <div class="admin-modal-icon">
+        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h2>Admin Access</h2>
+    </div>
+    <p>Enter the admin password to enable point editing.</p>
+    <label>Password</label>
+    <div class="admin-pw-wrap">
+      <input type="password" id="adminPwInput" placeholder="Admin password" onkeydown="if(event.key==='Enter')confirmAdminPw()">
+      <button class="admin-pw-toggle" onclick="toggleAdminPwVisibility()" tabindex="-1">
+        <svg id="eyeIcon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+    <div class="admin-error hidden" id="adminError">Incorrect password</div>
+    <div class="admin-modal-actions">
+      <button class="btn-secondary" onclick="closeAdminModal()">Cancel</button>
+      <button class="btn-admin-confirm" onclick="confirmAdminPw()">Unlock Edit Mode</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============================================
+// CONFIG
+// =============================================
+// Jim-only go-live (2026-06-01). Vinny/CappSpot test tracker removed from the UI;
+// vinny.json remains on disk and cache.js no longer polls it.
+const TRACKERS = [
+  { id:'jim', name:'Jim', feedId:'063250Vmtyt839X08qX3lZnHfMFi5eUrJ', color:'#e8a847' }
+];
+
+const POLL_INTERVAL = 180000;          // photo manifest poll (unchanged)
+// Single source of truth for the trail/marker auto-refresh cadence — the data poll
+// AND the on-screen countdown both derive from this. Never hardcode 60000 elsewhere.
+const REFRESH_INTERVAL_MS = 60000;
+// DEMO replay freeze (off). Set to a unixTime to render the track as of that moment for a
+// mid-ride demo; 0 = show the full, current track. (Used 2026-06-02 for Jim's preview.)
+const DEMO_CUTOFF_UNIX = 0;
+// Map-matching: a SPOT point farther than this from the nearest route segment is
+// treated as a genuine off-route detour — plotted raw, never snapped. Tune against
+// real data if legit points sit further off the line than expected.
+const OFFROUTE_THRESHOLD_M = 800;
+// Canonical planned-route distance (miles). route.gpx is downsampled for fast mobile
+// rendering, which slightly shortens its *measured* length (simplifying a wiggly line
+// cuts corners) — so we display this authoritative number instead of computing it from
+// the simplified line. Update if the route changes; the gear's manual override still wins.
+const ROUTE_MILES = 4024.3;
+// Elevation profile for the passive elevation strip. 500 samples EVENLY SPACED BY DISTANCE
+// along the route, so sample index === fraction-along-route — the progress fraction maps to
+// a sample with a plain multiply (no nearest-point search). Generated once from the FULL-res
+// route GPX (route.medium.gpx has its <ele> stripped by the downsample) via gen-elevation.mjs;
+// re-run that script and paste a fresh array if the route changes.
+const ROUTE_ELEV = [3.6,25.2,17.9,3.3,4.9,62.8,4.9,124.9,15.5,193.5,7.1,11.4,21.7,14.2,19.4,10.1,8,9.5,204.2,33.9,26.8,59.1,42.2,34.8,113.4,188.8,59.1,56.1,65.8,63.9,288.3,131.5,101,130.4,92.1,114.3,91.4,92.2,103.1,101.5,92,125.9,114.8,107.4,122.3,140.5,199.7,321,365.3,459.6,447.6,641.5,306.8,350.7,457.4,578.1,794.1,354.6,226,226,321.1,553.8,386.6,856.6,1182.9,1137,1085.4,1063.5,961.9,567.1,380.4,386.9,413.5,440.9,467.9,518.6,582.6,670.6,781.4,853.3,920.6,1000.8,1097.6,1532.8,1263.3,1163.5,1076.3,982.6,959,973.3,960,974.9,1002.5,1024,1057.4,1098.3,1156.2,1190.5,1252.3,1351.6,1729.7,2036.2,1919.9,1897.7,1858.3,1910.3,1985.5,2070.7,1922.5,1818.8,1947.9,1623.4,1549.9,1532.9,1465.6,1427.8,1471.5,1541.6,1572.1,1772.3,1778,1520.4,1628.6,1676.2,1763.5,1799.9,1900.6,2031.7,2010.6,2013.7,2043.9,2069.6,2193.6,2292.8,2482.5,2343.6,2370.2,2359.4,2594.5,2388.1,2023.5,1933.2,1843.1,1763.8,1672.1,1662.1,1532,1572.2,1561.3,1461.9,1398,1337.8,1266.8,1253.5,1200.4,1208,1245,1273.8,1304.9,1350.4,1576.5,2308.4,2747.6,2693.6,2414.2,2343.4,1926.5,1414.4,1319.3,1268.4,1216.4,1167.4,1193.4,1184.8,1243.5,1281.5,1287.5,1263.7,1319.8,1382.8,1340.4,1300.4,1281.7,1268.8,1262.9,1240.6,1329.9,1160.3,1143.5,1248.5,1235.6,1165.6,1157.1,1077.5,1108.7,1311.2,1535.2,1813.6,1783.8,1603.9,1484.3,1673.2,1539.2,1327,1352.9,1165,976.1,919.5,874.9,838.3,747.4,881.7,832.9,778.1,746.3,719.8,817.3,840.7,983,867.3,777.7,738.4,692.6,680.7,623.3,638.9,578.7,681.6,733.4,695.3,698.6,713.3,648,583.5,564.9,545.1,517.7,546.2,553.1,564.6,449.1,484.6,544.7,494.1,577.5,572.5,427,414.7,407.2,398.2,389.8,395,417.9,434.6,478.3,532.4,571.8,545.9,520.2,512.7,506.6,521.6,594.7,540.7,529.8,464.5,367.4,347.9,334,325.6,320.1,321.1,314.2,259.8,306.7,320.5,324.6,325.3,328.3,330.1,322.4,322,311.4,301.2,301.4,298.9,286,287.6,263.8,243.4,247.4,276.4,287.9,257.2,250.2,299.9,217.7,215.2,222.5,206.8,207.8,220.9,221.2,210.8,206.7,204.2,199,201,200,202,202,204,231.9,232.9,255,331,302.2,308.6,284.3,274,270,294.5,263,316,253.8,252,326.9,281,262,289.4,267.9,255,244,252,263,280,246,256,200,185.5,176.7,176.9,176.9,176.9,176.9,176.9,176.9,176.9,176.9,176.6,182.6,191.9,201.1,223.1,216.8,226.2,210.3,256.2,276.1,269.9,282,291.1,284.5,332.7,307.5,308.8,318,304.8,261.3,235.1,207.1,192,190.7,190.3,182.9,181.3,178.3,191.2,194.6,194.4,231.5,255.7,243.9,250.4,246.8,243.8,248.4,234.9,206.4,190.5,184.4,178.2,177.9,175.9,179.8,182.9,182.9,194.9,212.8,205.8,197.8,209.7,199.5,216.8,212.8,211.7,207,192.1,202.1,176.8,201,197.8,182.8,182.8,189.3,174.9,177.4,175.8,175.6,175.5,179.1,179.9,179.9,173.6,175.4,179.1,156.5,156.3,158,155.2,155.1,154.6,158.1,159.6,147.9,141.9,139.9,134.6,127.8,119.1,118.6,121.1,121.7,125.1,136.1,112.9,127.8,128.4,130.9,128.8,130.9,130.9,127.5,122.7,124.4,115.6,104.8,97.8,94.1,87.3,87,82.6,73.1,76.1,56.7,80.6,1.4,77.9,142.8,94.8,54.7,59.2,76.3,48.2,37.7,45.5,77.6,65,109.4,66.6,78.9,110.6,224,136.1,169.5,177.4,86.7,84.3,6.8,0,0,46.6,36.6,19.3,6.6,16.5,8.9,4.1,1.3,2.7];
+const FULL_TRACKER_URL = 'https://puppyride.vinnycapp.com/tracker.html';
+const PHOTO_API = '/photos-api';
+
+// Pre-launch countdown. Jim rolls out 8:00 AM Pacific, June 6 2026. The -07:00 offset
+// (PDT) is explicit so the countdown is correct for viewers in any timezone. The overlay
+// auto-hides the moment this passes. Update both if the start time changes.
+const RIDE_START = new Date('2026-06-08T08:00:00-07:00');
+const RIDE_START_LABEL = 'June 8 · 8:00 AM PT';
+
+// URL params
+const _params = new URLSearchParams(window.location.search);
+// ?embed=1 — stripped, map-maximized view for the Wix mobile iframe: hide the title/brand
+// band + branding footer, keep the LIVE/next-update bar + collapsed Legend + compact stats,
+// and LOCK follow mode on. Presentation-only (pure CSS via the `embed` body class) + a
+// follow-pause short-circuit; same live data/refresh path. Distinct from the legacy
+// ?embed / ?embed=true teaser below — '1' must NOT trigger that mode.
+const EMBED = _params.get('embed') === '1';
+// Tag BOTH <html> and <body> so embed-only CSS can reach the root element (lock page
+// height / kill scroll-grab). Gated on EMBED — normal loads get neither class.
+if (EMBED) { document.documentElement.classList.add('embed'); document.body.classList.add('embed'); }
+// Legacy embed teaser — slim chrome for iframes (embed-bar + "Full Tracker" frame-bust).
+// Unchanged for ?embed / ?embed=true; explicitly EXCLUDES ?embed=1 so the two never overlap.
+const EMBED_MODE = _params.has('embed') && !EMBED;
+if (EMBED_MODE) document.body.classList.add('embed-mode');
+// With ?embed=true, the FIRST tap/click anywhere navigates the top window to the full
+// tracker (frame-bust; new-tab fallback if top-nav is blocked), then removes itself.
+// NOTE: this intercepts the first map interaction (pan / marker click / zoom button) —
+// intended for a teaser/preview embed, not an interactive one.
+if (_params.get('embed') === 'true') {
+  document.addEventListener('click', function() {
+    try { window.top.location.href = 'https://puppyride.vinnycapp.com/tracker.html'; }
+    catch(e) { window.open('https://puppyride.vinnycapp.com/tracker.html', '_blank'); }
+  }, { once: true });
+}
+// Admin chrome — gear (settings) + pencil (edit) only render with ?admin=1.
+// CHROME-HIDING ONLY: the real gates are the Admin Access password (server-validated,
+// unlocks edit mode) and the server-side PHOTO_PASSWORD on every destructive endpoint.
+const ADMIN_CHROME = _params.has('admin');
+// Photo/admin password, cached for the session once validated server-side.
+let photoPassword = sessionStorage.getItem('puppyride_photo_pw') || '';
+
+// Basemap styles. The default Light/Dark are self-hosted Protomaps VECTOR tiles
+// (PMTiles, served from this same origin — zero per-tile cost, no Stadia/ToS surface).
+// Satellite/Topo remain optional RASTER toggles (non-Stadia: ArcGIS / OpenTopoMap).
+// type:'pmtiles' -> protomaps-leaflet vector layer with the given flavor;
+// type:'raster'  -> plain L.tileLayer.
+const PMTILES_URL = 'puppyride-v2.pmtiles';   // same-origin, range-served by nginx (route-buffered corridor)
+const PMTILES_MAXZOOM = 14;                // corridor extract max data zoom; overzoom past this
+const MAP_STYLES = [
+  { id:'light', name:'Light', type:'pmtiles', flavor:'light' },
+  { id:'dark',  name:'Dark',  type:'pmtiles', flavor:'dark' },
+  { id:'satellite', name:'Satellite', type:'raster', url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' },
+  { id:'topo', name:'Topo', type:'raster', url:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png' }
+];
+
+// =============================================
+// STATE
+// =============================================
+// currentView is fixed to 'history' (single-view as of 2026-06-02): always show the full
+// track so far + current position. Kept as a variable so the snapped-render code reads
+// cleanly; nothing flips it anymore.
+let map, tileLayer, activeTrackerId = TRACKERS[0].id, currentView = 'history';
+let currentStyle = localStorage.getItem('mapStyle') || 'dark';
+let trackerData = {}, trailLayers = {}, glowLayers = {}, markerLayers = {}, historyPointLayers = {}, pollTimers = {};
+// Snapped-route layers (only used when a GPX route is loaded). traveled = gold solid,
+// untraveled = soft-blue solid underlay + dashed overlay, offroute = raw gray dotted detours.
+let traveledLayers = {}, untraveledLayers = {}, untraveledBaseLayers = {}, offrouteLayers = {};
+let gpxLayer = null, gpxGlowLayer = null, gpxRouteDistance = 0;
+// Flattened GPX route for map-matching: [{lat,lng,distAlong(m)}], cumulative from start.
+let routeFlat = [], routeReady = false, routeTotalM = 0, routeIsAuthoritative = false;
+// True from the moment we kick off a GPX fetch until it's parsed (or errors/times out).
+// While pending, renderTrail suppresses the RAW point-to-point fallback so the trail never
+// flashes as gold straight lines between SPOT points before the route snaps in. The route is
+// ~176KB and loads via leaflet-gpx's async 'loaded' event; jim.json (~11KB) lands first, so
+// without this gate the first render draws the raw gold straight line until the GPX arrives.
+let gpxPending = false, gpxPendingTimer = null;
+let trackerProgress = {};   // trackerId -> meters along route of latest matched point
+// Auto-refresh state
+let dataRefreshTimer = null, countdownTickTimer = null;
+let nextRefreshAt = 0, refreshState = 'idle';   // idle | updating | failed
+let lastLatestTs = {};      // trackerId -> latest unixTime seen, to no-op unchanged polls
+// Follow mode: on each auto-refresh, re-center/zoom on Jim's latest point — but only
+// until the user pans/zooms by hand, at which point following pauses (we don't fight
+// their interaction) and resumes on the next full page load. isProgrammaticMove flags
+// our OWN flyTo/fitBounds calls so the dragstart/zoomstart handlers don't mistake them
+// for a manual move. FOLLOW_ZOOM frames him on a phone (drop to 12 if 13 feels too tight).
+const FOLLOW_ZOOM = 13;
+let followMode = true;
+let isProgrammaticMove = false;
+let editMode = false;
+let adminUnlocked = sessionStorage.getItem('puppyride_admin') === 'true';
+let hiddenPoints = JSON.parse(localStorage.getItem('hiddenPoints') || '{}');
+
+// =============================================
+// DEMO DATA
+// =============================================
+function generateDemoData(id) {
+  const now = Date.now(), pts = [];
+  if (id === 'vinny') {
+    for (let i = 0; i < 25; i++) pts.push({ latitude:42.4913+i*0.003+Math.random()*0.001, longitude:-76.297+i*0.004+Math.random()*0.001, unixTime:Math.floor((now-(25-i)*600000)/1000), dateTime:new Date(now-(25-i)*600000).toISOString(), messageType:i===0?'OK':'TRACK', batteryState:'GOOD', messengerName:'Vinny-SPOT', modelId:'SPOTGEN4' });
+  } else {
+    for (let i = 0; i < 20; i++) pts.push({ latitude:40.7128+i*0.008+Math.random()*0.002, longitude:-74.006+i*0.012+Math.random()*0.002, unixTime:Math.floor((now-(20-i)*900000)/1000), dateTime:new Date(now-(20-i)*900000).toISOString(), messageType:i===0?'OK':'TRACK', batteryState:i>15?'LOW':'GOOD', messengerName:'Jim-SPOT', modelId:'SPOTGEN4' });
+  }
+  return pts;
+}
+
+// =============================================
+// INIT
+// =============================================
+function init() {
+  TRACKERS.forEach(t => { const s=localStorage.getItem('spot_feed_'+t.id); if(s) t.feedId=s; });
+  const savedDist = localStorage.getItem('manualRouteDist');
+  gpxRouteDistance = savedDist ? parseFloat(savedDist) : ROUTE_MILES;
+
+  // Restore the elevation strip's collapsed state before the first render (updateStats).
+  applyElevCollapsed(localStorage.getItem('elevCollapsed') === '1');
+
+  // In embed mode default to Jim's tracker + history view
+  if (EMBED_MODE) {
+    activeTrackerId = 'jim';
+    currentView = 'history';
+  }
+
+  // Admin chrome gating — gear + pencil only render with ?admin=1. The upload
+  // button stays public (Jim's team needs it; it's password-gated server-side).
+  if (!ADMIN_CHROME) {
+    const eb = document.getElementById('editBtn'); if (eb) eb.style.display = 'none';
+    const sb = document.getElementById('settingsBtn'); if (sb) sb.style.display = 'none';
+  }
+
+  // ?embed=1: drop the Legend (hidden via the corner-stack in CSS) and relocate the Donate
+  // button into the info-panel right above the stats bar, so it stays hugging the stats bar
+  // even if the stats accordion is expanded. Gated on EMBED — normal loads are untouched.
+  if (EMBED) {
+    const donate = document.querySelector('.corner-stack .corner-cta.donate');
+    const stats = document.getElementById('statsCompact');
+    if (donate && stats && stats.parentNode) stats.parentNode.insertBefore(donate, stats);
+  }
+
+  map = L.map('map', { center:[39.5,-98.35], zoom:5, zoomControl:false });
+  L.control.zoom({ position:'topright' }).addTo(map);
+
+  // Follow-mode pause: a real user drag/zoom turns following off so we never yank the
+  // map back under their finger. Our own programmatic moves set isProgrammaticMove first
+  // (programmatic flyTo fires zoomstart too), so they're ignored here; moveend clears it.
+  // In ?embed=1 follow starts LOCKED on (casual viewer stays centered on Jim). Once the user
+  // taps "Tap to interact" (embedActivated=true), a real drag/zoom pauses follow just like
+  // normal mode, so the map doesn't yank back under their finger. Non-embed loads: unchanged.
+  let embedActivated = false;
+  map.on('dragstart', () => { if (!isProgrammaticMove && (!EMBED || embedActivated)) followMode = false; });
+  map.on('zoomstart', () => { if (!isProgrammaticMove && (!EMBED || embedActivated)) followMode = false; });
+  map.on('moveend',  () => { isProgrammaticMove = false; });
+
+  // Photo/video offset+cluster layer is pixel-space at the current zoom, so it must
+  // recompute whenever the projection changes. (recomputePhotoClusters no-ops until
+  // photos load.) A bare map click collapses any open spiderfy fan — marker/badge
+  // clicks stop propagation, so this only fires on the empty basemap.
+  map.on('zoomend moveend', recomputePhotoClusters);
+  map.on('click', () => { if (spiderfy) { spiderfy = null; recomputePhotoClusters(); } });
+
+  // ?embed=1 CLICK-TO-ACTIVATE: disable ALL Leaflet interaction on load so touches over the
+  // map bubble to the parent (Wix) page — the page scrolls past the embed normally instead of
+  // the map grabbing the gesture. The map becomes interactive only after the user taps the
+  // "Tap to interact" overlay. This REPLACES the old touch-action:none + touchmove-preventDefault
+  // guard, which grabbed the gesture and blocked parent scroll (the opposite of what we want).
+  if (EMBED) {
+    map.dragging.disable();
+    map.touchZoom.disable();
+    map.doubleClickZoom.disable();
+    map.scrollWheelZoom.disable();
+    map.boxZoom.disable();
+    map.keyboard.disable();
+    if (map.tap) map.tap.disable();
+
+    const mapEl = document.getElementById('map');
+    const overlay = document.createElement('div');
+    overlay.className = 'embed-activate-overlay';
+    overlay.innerHTML = '<span class="embed-activate-pill">Tap to interact</span>';
+    if (mapEl) mapEl.appendChild(overlay);
+
+    // Use CLICK (not touchend) to activate: a click does NOT fire after a scroll gesture, so
+    // scrolling the parent page past the embed never accidentally activates the map.
+    overlay.addEventListener('click', () => {
+      map.dragging.enable();
+      map.touchZoom.enable();
+      map.doubleClickZoom.enable();
+      map.scrollWheelZoom.enable();
+      map.boxZoom.enable();
+      map.keyboard.enable();
+      if (map.tap) map.tap.enable();
+      embedActivated = true;
+      document.body.classList.add('embed-activated');
+      overlay.remove();
+    });
+  }
+
+  setMapStyle(currentStyle);
+  buildStylePicker();
+  if (!EMBED_MODE) buildTrackerToggle();
+  loadGPX();
+  loadAllTrackers();
+  if (!EMBED_MODE) switchTracker(activeTrackerId);
+
+  // Pre-launch countdown overlay (auto-hides at ride start).
+  tickRideCountdown();
+  setInterval(tickRideCountdown, 1000);
+}
+
+// =============================================
+// MAP STYLES
+// =============================================
+function setMapStyle(styleId) {
+  const s = MAP_STYLES.find(m => m.id === styleId) || MAP_STYLES[0];
+  currentStyle = s.id;                       // normalize (handles stale localStorage ids)
+  localStorage.setItem('mapStyle', currentStyle);
+  if (tileLayer) { map.removeLayer(tileLayer); tileLayer = null; }
+  if (s.type === 'pmtiles') {
+    // Self-hosted Protomaps vector basemap. protomaps-leaflet handles range requests to
+    // the .pmtiles directly; maxDataZoom overzooms the z14 corridor data past z14.
+    tileLayer = protomapsL.leafletLayer({
+      url: PMTILES_URL,
+      flavor: s.flavor,
+      lang: 'en',
+      maxDataZoom: PMTILES_MAXZOOM,
+      attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>'
+    }).addTo(map);
+  } else {
+    tileLayer = L.tileLayer(s.url, { maxZoom:19 }).addTo(map);
+  }
+  document.querySelectorAll('.map-style-opt').forEach(b => b.classList.toggle('active', b.dataset.style === currentStyle));
+}
+
+function buildStylePicker() {
+  const el = document.getElementById('stylePicker');
+  el.innerHTML = MAP_STYLES.map(s => `<button class="map-style-opt ${s.id===currentStyle?'active':''}" data-style="${s.id}">${s.name}</button>`).join('');
+}
+
+function toggleStylePicker() {
+  document.getElementById('stylePicker').classList.toggle('open');
+}
+
+// Style-picker clicks are DELEGATED on document (a parent that can never be re-rendered),
+// matched by class at click time — so rebuilding the picker's innerHTML or any future
+// panel/accordion refactor can't detach them. Clicking anywhere else closes an open picker.
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.map-style-btn')) { toggleStylePicker(); return; }
+  const opt = e.target.closest('.map-style-opt');
+  if (opt && opt.dataset.style) { setMapStyle(opt.dataset.style); toggleStylePicker(); return; }
+  const picker = document.getElementById('stylePicker');
+  if (picker && picker.classList.contains('open')) picker.classList.remove('open');
+});
+
+// Legend accordion: flip the .open class (pure CSS height/display toggle, no library).
+function toggleLegend() {
+  const el = document.getElementById('legend');
+  const open = el.classList.toggle('open');
+  document.getElementById('legendHeader').setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+// Stats bar accordion (mobile only): expands the full breakdown under the compact summary.
+function toggleStats() {
+  const el = document.getElementById('infoPanel');
+  const open = el.classList.toggle('stats-open');
+  document.getElementById('statsCompact').setAttribute('aria-expanded', open ? 'true' : 'false');
+  layoutFloatingControls();   // expanding the stat cards changes panel height — keep the stack clear
+}
+
+// =============================================
+// GPX ROUTE OVERLAY
+// =============================================
+function loadGPX() {
+  // A route is ALWAYS loaded (default or configured), so mark pending up front — this
+  // suppresses the raw straight-line fallback until the route is ready. Safety net: if the
+  // GPX never resolves (CDN/file failure), clear pending after 8s and re-render so we're
+  // never left with no trail at all.
+  gpxPending = true;
+  if (gpxPendingTimer) clearTimeout(gpxPendingTimer);
+  gpxPendingTimer = setTimeout(() => { if (gpxPending) { gpxPending = false; TRACKERS.forEach(renderTrail); } }, 8000);
+  const savedGpx = localStorage.getItem('gpxUrl');
+  if (savedGpx) { routeIsAuthoritative = false; loadGPXFromUrl(savedGpx); return; }
+  const savedFile = localStorage.getItem('gpxData');
+  if (savedFile) { routeIsAuthoritative = false; loadGPXFromString(savedFile); return; }
+  // Default = the cross-country route. Its measured length is authoritative-by-fiat
+  // (ROUTE_MILES): the file is downsampled for mobile, so its *measured* length runs a
+  // touch short — we trust the documented number instead. Any OTHER GPX (gear URL/file)
+  // is full-resolution, so we use its measured length. Stable ?v token busts stale caches.
+  // route.medium.gpx = 15m-tolerance RDP downsample (12,756 pts / ~667KB): follows the road
+  // to within ~15m so the snapped gold trail stops cutting corners (the old light-3287 route
+  // wandered up to ~150m). route.gpx (light) + route.full.gpx are still on disk if needed.
+  routeIsAuthoritative = true;
+  loadGPXFromUrl('data/route.medium.gpx?v=medium-12756');
+}
+
+function loadGPXFromUrl(url) {
+  if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+  if (gpxGlowLayer) { map.removeLayer(gpxGlowLayer); gpxGlowLayer = null; }
+  gpxGlowLayer = new L.GPX(url, { async:true, polyline_options:{color:'#1d4ed8',weight:16,opacity:0.15,lineCap:'round'}, marker_options:{startIconUrl:null,endIconUrl:null,shadowUrl:null,wptIconUrls:{}} }).addTo(map);
+  gpxLayer = new L.GPX(url, { async:true, polyline_options:{color:'#1d4ed8',weight:4,opacity:0.8,lineCap:'round'}, marker_options:{startIconUrl:null,endIconUrl:null,shadowUrl:null,wptIconUrls:{}} }).on('loaded', function(e) { if(!gpxRouteDistance) gpxRouteDistance=e.target.get_distance()/1609.34; onGpxLoaded(e.target); }).on('error', onGpxError).addTo(map);
+}
+
+// GPX fetch/parse failed: stop waiting on the route so the raw trail can render as a
+// fallback (better a straight line than no trail). Snapping resumes if a later load succeeds.
+function onGpxError() {
+  if (gpxPendingTimer) { clearTimeout(gpxPendingTimer); gpxPendingTimer = null; }
+  if (gpxPending) { gpxPending = false; TRACKERS.forEach(renderTrail); }
+}
+
+function loadGPXFromString(gpxString) {
+  if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+  if (gpxGlowLayer) { map.removeLayer(gpxGlowLayer); gpxGlowLayer = null; }
+  gpxGlowLayer = new L.GPX(gpxString, { async:true, polyline_options:{color:'#1d4ed8',weight:16,opacity:0.15,lineCap:'round'}, marker_options:{startIconUrl:null,endIconUrl:null,shadowUrl:null,wptIconUrls:{}} }).addTo(map);
+  gpxLayer = new L.GPX(gpxString, { async:true, polyline_options:{color:'#1d4ed8',weight:4,opacity:0.8,lineCap:'round'}, marker_options:{startIconUrl:null,endIconUrl:null,shadowUrl:null,wptIconUrls:{}} }).on('loaded', function(e) { if(!gpxRouteDistance) gpxRouteDistance=e.target.get_distance()/1609.34; onGpxLoaded(e.target); }).on('error', onGpxError).addTo(map);
+}
+
+// =============================================
+// MAP MATCHING — flatten GPX, snap SPOT points to the route
+// =============================================
+// Fired once leaflet-gpx finishes parsing. Builds the flattened route array, hides
+// the raw blue GPX line (we now draw the route ourselves, split into traveled/
+// untraveled), then re-renders every trail as a snapped path. Graceful no-op if the
+// route can't be flattened — falls back to the existing point-to-point trail.
+function onGpxLoaded(gpxTarget) {
+  // Route has arrived — stop suppressing the raw fallback (renderTrail below will draw the
+  // snapped gold/blue route instead) and cancel the safety timeout.
+  gpxPending = false;
+  if (gpxPendingTimer) { clearTimeout(gpxPendingTimer); gpxPendingTimer = null; }
+  buildRouteFlat(gpxTarget);
+  // Total distance: a manual gear override always wins; else for any non-authoritative
+  // (full-resolution) GPX use its measured length so the % and remaining mileage are
+  // exact. The cross-country default keeps its documented ROUTE_MILES.
+  if (routeReady && !routeIsAuthoritative && !localStorage.getItem('manualRouteDist')) {
+    gpxRouteDistance = routeTotalM / 1609.34;
+  }
+  if (routeReady && routeFlat.length > 1) {
+    TRACKERS.forEach(renderTrail);
+  }
+  updateBaseRouteVisibility();
+  updateStats();
+  fitToRouteIfNoData(gpxTarget);
+  // Photos may have loaded before the route arrived (jim.json lands before the GPX).
+  // Now that routeFlat exists, recompute the nearest-route geometry so the offsets
+  // become perpendicular-to-trail instead of the no-route fallback.
+  if (photoEntries.length) { assignRouteIndices(); recomputePhotoClusters(); }
+}
+
+// The plain (blue) GPX line is the visible route BEFORE anyone is moving — so it shows
+// under the pre-launch countdown. Once a tracker has points, we hide it and let the
+// snapped gold/white route take over (no double-drawn route).
+function updateBaseRouteVisibility() {
+  const anyData = TRACKERS.some(t => { const d = getFilteredData(t.id); return d && d.length; });
+  try { if (gpxLayer)     gpxLayer.setStyle({ opacity: anyData ? 0 : 0.85 }); } catch(e){}
+  try { if (gpxGlowLayer) gpxGlowLayer.setStyle({ opacity: anyData ? 0 : 0.18 }); } catch(e){}
+}
+
+// Recursively flatten leaflet-gpx child polylines into one ordered [lat,lng] list.
+function flattenLatLngs(lls, out) {
+  if (!lls) return;
+  if (Array.isArray(lls)) { lls.forEach(x => flattenLatLngs(x, out)); return; }
+  if (typeof lls.lat === 'number') out.push([lls.lat, lls.lng]);
+}
+
+function buildRouteFlat(layer) {
+  const coords = [];
+  try {
+    layer.getLayers().forEach(function collect(l) {
+      if (l.getLatLngs) flattenLatLngs(l.getLatLngs(), coords);
+      else if (l.getLayers) l.getLayers().forEach(collect);
+    });
+  } catch (e) { coords.length = 0; }
+  if (coords.length < 2) { routeFlat = []; routeReady = false; routeTotalM = 0; return; }
+  const flat = [];
+  let cum = 0;
+  for (let i = 0; i < coords.length; i++) {
+    if (i > 0) cum += haversineM(coords[i-1][0], coords[i-1][1], coords[i][0], coords[i][1]);
+    flat.push({ lat: coords[i][0], lng: coords[i][1], distAlong: cum });
+  }
+  routeFlat = flat;
+  routeTotalM = cum;
+  routeReady = true;
+  candCache = {};   // new route invalidates all cached point→route matches
+}
+
+// Equirectangular local-planar projection of point P onto segment A→B (meters).
+// Accurate at SPOT-segment scale; far cheaper than a true geodesic projection.
+function pointToSegmentProjection(p, a, b) {
+  const R = 6371000, toRad = Math.PI / 180;
+  const cosRef = Math.cos(a.lat * toRad);
+  const px = p.lng * toRad * R * cosRef, py = p.lat * toRad * R;
+  const ax = a.lng * toRad * R * cosRef, ay = a.lat * toRad * R;
+  const bx = b.lng * toRad * R * cosRef, by = b.lat * toRad * R;
+  const dx = bx - ax, dy = by - ay, len2 = dx*dx + dy*dy;
+  let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const projX = ax + t * dx, projY = ay + t * dy;
+  return {
+    projectedLatLng: [ a.lat + t * (b.lat - a.lat), a.lng + t * (b.lng - a.lng) ],
+    distToSegment: Math.hypot(px - projX, py - projY),
+    tAlongSeg: t
+  };
+}
+
+// Per-point candidate finder. A simple "nearest segment" match is ambiguous on loops
+// and self-crossing routes (the start of a loop is also its end; a road ridden twice
+// has two equally-near vertices). So instead of one answer we return ALL plausible
+// matches — the local minima of distToSegment that fall under the off-route threshold —
+// and let matchSequence() pick the consistent one using time order. Cached by point
+// identity so a multi-week ride doesn't re-scan the whole route every refresh.
+let candCache = {};
+function pointCandidates(p) {
+  const key = `${p.unixTime}_${p.latitude}_${p.longitude}`;
+  if (candCache[key]) return candCache[key];
+  const N = routeFlat.length - 1, d = new Array(N), al = new Array(N);
+  let gi = 0;
+  for (let i = 0; i < N; i++) {
+    const r = pointToSegmentProjection({lat:p.latitude,lng:p.longitude}, routeFlat[i], routeFlat[i+1]);
+    d[i] = r.distToSegment;
+    al[i] = routeFlat[i].distAlong + r.tAlongSeg * (routeFlat[i+1].distAlong - routeFlat[i].distAlong);
+    if (d[i] < d[gi]) gi = i;
+  }
+  const raw = [];
+  for (let i = 0; i < N; i++) {
+    if (d[i] > OFFROUTE_THRESHOLD_M) continue;
+    const l = i > 0 ? d[i-1] : Infinity, r = i < N-1 ? d[i+1] : Infinity;
+    if (d[i] <= l && d[i] <= r) raw.push({ distAlong: al[i], dist: d[i] });
+  }
+  // Merge near-equal minima (adjacent flat spots) so one road-pass = one candidate.
+  raw.sort((a,b) => a.distAlong - b.distAlong);
+  const cands = [];
+  for (const c of raw) {
+    const last = cands[cands.length-1];
+    if (last && Math.abs(c.distAlong - last.distAlong) < 100) { if (c.dist < last.dist) { last.distAlong = c.distAlong; last.dist = c.dist; } }
+    else cands.push({ ...c });
+  }
+  const res = { cands, nearest: { distAlong: al[gi], dist: d[gi], offRoute: d[gi] > OFFROUTE_THRESHOLD_M } };
+  candCache[key] = res;
+  return res;
+}
+
+// Sequential map-matching (Viterbi). Resolves each on-route point's position along the
+// route by minimizing, over the whole time-ordered chain: emission cost (how far the
+// point sits off its candidate segment) + transition cost (how far the along-route step
+// deviates from the actual straight-line distance the rider moved). This is what makes a
+// loop resolve as 0→full instead of snapping the first ping to the finish line. Returns
+// one {distAlong, offRoute, dist} per point, in the input order. Points with no on-route
+// candidate are flagged offRoute and keep their raw nearest distAlong (unused for gold).
+function matchSequence(data) {
+  const per = data.map(pointCandidates);
+  const out = data.map((p,i) => ({ distAlong: per[i].nearest.distAlong, offRoute: per[i].nearest.offRoute, dist: per[i].nearest.dist }));
+  const onIdx = [];
+  per.forEach((c,i) => { if (c.cands.length) onIdx.push(i); });
+  if (!onIdx.length) return out;
+  let prev = per[onIdx[0]].cands.map(c => ({ cost: c.dist, distAlong: c.distAlong, back: -1 }));
+  const bp = [prev.map(s => ({ ...s }))];
+  for (let j = 1; j < onIdx.length; j++) {
+    const cs = per[onIdx[j]].cands;
+    const A = data[onIdx[j-1]], B = data[onIdx[j]];
+    const Dreal = haversineM(A.latitude, A.longitude, B.latitude, B.longitude);
+    const cur = cs.map(c => {
+      let best = Infinity, bi = -1;
+      for (let s = 0; s < prev.length; s++) {
+        const tot = prev[s].cost + Math.abs(Math.abs(c.distAlong - prev[s].distAlong) - Dreal);
+        if (tot < best) { best = tot; bi = s; }
+      }
+      return { cost: best + c.dist, distAlong: c.distAlong, back: bi };
+    });
+    bp.push(cur.map(s => ({ ...s })));
+    prev = cur;
+  }
+  let bi = 0;
+  for (let s = 1; s < prev.length; s++) if (prev[s].cost < prev[bi].cost) bi = s;
+  for (let j = onIdx.length - 1; j >= 0; j--) {
+    out[onIdx[j]].distAlong = bp[j][bi].distAlong;
+    out[onIdx[j]].offRoute = false;
+    bi = bp[j][bi].back < 0 ? 0 : bp[j][bi].back;
+  }
+  return out;
+}
+
+// Split the GPX vertices at a cumulative distance D (meters) into a traveled prefix
+// and an untraveled remainder, interpolating an exact vertex at the boundary so both
+// lines meet cleanly.
+function splitRouteAt(D) {
+  const traveled = [], untraveled = [];
+  for (let i = 0; i < routeFlat.length; i++) {
+    const v = routeFlat[i];
+    if (v.distAlong <= D) { traveled.push([v.lat, v.lng]); continue; }
+    if (i > 0) {
+      const prev = routeFlat[i - 1], seg = v.distAlong - prev.distAlong;
+      const f = seg > 0 ? (D - prev.distAlong) / seg : 0;
+      const iLat = prev.lat + f * (v.lat - prev.lat), iLng = prev.lng + f * (v.lng - prev.lng);
+      traveled.push([iLat, iLng]); untraveled.push([iLat, iLng]);
+    }
+    for (let j = i; j < routeFlat.length; j++) untraveled.push([routeFlat[j].lat, routeFlat[j].lng]);
+    return { traveled, untraveled };
+  }
+  return { traveled, untraveled };   // D past route end → all traveled
+}
+
+// Lat/lng of the point exactly D meters along the route (interpolated within a segment).
+// Used to sit the current-position marker right on the end of the gold line.
+function routePosAt(D) {
+  for (let i = 0; i < routeFlat.length; i++) {
+    if (routeFlat[i].distAlong >= D) {
+      if (i === 0) return [routeFlat[0].lat, routeFlat[0].lng];
+      const prev = routeFlat[i-1], v = routeFlat[i], seg = v.distAlong - prev.distAlong;
+      const f = seg > 0 ? (D - prev.distAlong) / seg : 0;
+      return [prev.lat + f * (v.lat - prev.lat), prev.lng + f * (v.lng - prev.lng)];
+    }
+  }
+  const last = routeFlat[routeFlat.length-1];
+  return [last.lat, last.lng];
+}
+
+// Group chronological runs where a point (or its neighbor) is off-route into raw
+// polylines, anchored to the on-route point on each side so detours read naturally.
+function buildOffrouteSegments(data, matched) {
+  const segs = []; let cur = null;
+  for (let i = 1; i < data.length; i++) {
+    if (matched[i].offRoute || matched[i - 1].offRoute) {
+      if (!cur) cur = [[data[i-1].latitude, data[i-1].longitude]];
+      cur.push([data[i].latitude, data[i].longitude]);
+    } else if (cur) { segs.push(cur); cur = null; }
+  }
+  if (cur) segs.push(cur);
+  return segs;
+}
+
+// On a phone the default US-overview zoom is too tight to see the whole coast-to-coast
+// route, forcing a manual zoom-out. Auto-fit the map to the GPX route bounds so it's
+// framed to the viewport on load. Only applies while the tracker has no live data yet —
+// once Jim is moving, flyToActive() frames his position instead.
+function fitToRouteIfNoData(gpxTarget) {
+  const data = getFilteredData(activeTrackerId);
+  if (data && data.length) return;
+  const layer = gpxTarget || gpxLayer;
+  try {
+    const b = layer && layer.getBounds && layer.getBounds();
+    // Asymmetric padding keeps the route clear of the header (top) and the
+    // stats/status info panel (bottom) overlays.
+    if (b && b.isValid()) { isProgrammaticMove = true; map.fitBounds(b, { paddingTopLeft:[20,70], paddingBottomRight:[20,150] }); }
+  } catch (e) {}
+}
+
+// Re-fill the viewport and re-frame the route on phone rotate / window resize
+// (only re-frames pre-launch; never yanks the view once Jim has live data).
+let _ppFitT;
+window.addEventListener('resize', () => {
+  clearTimeout(_ppFitT);
+  _ppFitT = setTimeout(() => { if (map) { map.invalidateSize(); fitToRouteIfNoData(); } }, 250);
+});
+
+// =============================================
+// HIDDEN POINTS
+// =============================================
+function getHiddenSet(trackerId) { if(!hiddenPoints[trackerId]) hiddenPoints[trackerId]=[]; return hiddenPoints[trackerId]; }
+
+function hidePoint(trackerId, unixTime, lat, lng) {
+  const key=`${unixTime}_${lat}_${lng}`;
+  if(!hiddenPoints[trackerId]) hiddenPoints[trackerId]=[];
+  if(!hiddenPoints[trackerId].includes(key)) hiddenPoints[trackerId].push(key);
+  localStorage.setItem('hiddenPoints',JSON.stringify(hiddenPoints));
+  const tracker=TRACKERS.find(t=>t.id===trackerId);
+  if(tracker){renderTrail(tracker);updateStats();}
+}
+
+// Server-side point removal — strips a bad SPOT point from jim.json for EVERY
+// viewer (photo-server records the exclusion; cache.js keeps it removed on each poll).
+async function removePointServer(trackerId, unixTime, lat, lng) {
+  if (!confirm('Remove this SPOT point for ALL viewers? It will be permanently filtered out of the public track.')) return;
+  let pw = photoPassword || sessionStorage.getItem('puppyride_photo_pw') || '';
+  if (!pw) { pw = prompt('Admin password to remove this point:') || ''; if (!pw) return; }
+  try {
+    const r = await fetch(`${PHOTO_API}/admin/hide-point`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw, unixTime, latitude: lat, longitude: lng }) });
+    if (r.status === 401) { alert('Wrong password.'); photoPassword=''; sessionStorage.removeItem('puppyride_photo_pw'); return; }
+    const j = await r.json();
+    if (!j.success) { alert('Could not remove point: ' + (j.error || 'unknown error')); return; }
+    photoPassword = pw; sessionStorage.setItem('puppyride_photo_pw', pw);
+    // Drop it from in-memory data so it disappears immediately, no reload needed.
+    if (Array.isArray(trackerData[trackerId])) {
+      trackerData[trackerId] = trackerData[trackerId].filter(p => !(p.unixTime===unixTime && p.latitude===lat && p.longitude===lng));
+    }
+    map.closePopup();
+    const t = TRACKERS.find(t => t.id === trackerId);
+    if (t) renderTrail(t);
+    updateStats();
+  } catch (e) { alert('Network error removing point.'); }
+}
+
+async function clearHiddenPoints() {
+  // Legacy per-device hides (localStorage)
+  hiddenPoints={};
+  localStorage.setItem('hiddenPoints',JSON.stringify(hiddenPoints));
+  // Server-side removals — clear the shared exclusions list for all viewers.
+  let pw = photoPassword || sessionStorage.getItem('puppyride_photo_pw') || '';
+  if (!pw) pw = prompt('Admin password to restore all removed points:') || '';
+  if (pw) {
+    try {
+      const r = await fetch(`${PHOTO_API}/admin/unhide-all`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) });
+      if (r.status === 401) alert('Wrong password — local hides cleared, but server removals were NOT restored.');
+      else { photoPassword=pw; sessionStorage.setItem('puppyride_photo_pw', pw); }
+    } catch (e) {}
+  }
+  document.getElementById('hiddenCount').textContent='0 points hidden';
+  // Removed points reappear in jim.json on the next cache poll (≤5 min) if SPOT still serves them.
+  TRACKERS.forEach(t=>renderTrail(t));
+  updateStats();
+  loadAllTrackers();
+}
+
+function getFilteredData(trackerId) {
+  let raw=trackerData[trackerId]||[];
+  // DEMO replay: drop everything after the cutoff so the page renders a mid-ride state.
+  if(DEMO_CUTOFF_UNIX) raw=raw.filter(p=>p.unixTime<=DEMO_CUTOFF_UNIX);
+  const hidden=getHiddenSet(trackerId);
+  if(!hidden.length) return raw;
+  return raw.filter(p=>!hidden.includes(`${p.unixTime}_${p.latitude}_${p.longitude}`));
+}
+
+// =============================================
+// ADMIN / EDIT MODE
+// =============================================
+function requestEditMode() {
+  if (adminUnlocked) {
+    toggleEditMode();
+    return;
+  }
+  // Show password modal
+  document.getElementById('adminPwInput').value = '';
+  document.getElementById('adminError').classList.add('hidden');
+  document.getElementById('adminOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('adminPwInput').focus(), 100);
+}
+
+function closeAdminModal() {
+  document.getElementById('adminOverlay').classList.remove('open');
+}
+
+function toggleAdminPwVisibility() {
+  const input = document.getElementById('adminPwInput');
+  const icon = document.getElementById('eyeIcon');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  } else {
+    input.type = 'password';
+    icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+
+// Validates against the server (PHOTO_PASSWORD) instead of a client-side constant,
+// so the edit-mode password never ships in the page source AND the same validated
+// password authorizes the server-side point-removal calls below.
+async function confirmAdminPw() {
+  const input = document.getElementById('adminPwInput');
+  const err = document.getElementById('adminError');
+  const btn = document.querySelector('.btn-admin-confirm');
+  const pw = input.value;
+  if (!pw) return;
+  const prevLabel = btn.textContent; btn.textContent = 'Checking…'; btn.disabled = true;
+  let ok = false;
+  try {
+    const r = await fetch(`${PHOTO_API}/check-password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw, scope: 'admin' }) });
+    const j = await r.json(); ok = !!j.valid;
+  } catch (e) { ok = false; }
+  btn.textContent = prevLabel; btn.disabled = false;
+  if (ok) {
+    adminUnlocked = true;
+    photoPassword = pw;
+    sessionStorage.setItem('puppyride_admin', 'true');
+    sessionStorage.setItem('puppyride_photo_pw', pw);
+    closeAdminModal();
+    toggleEditMode();
+  } else {
+    input.classList.add('shake');
+    err.classList.remove('hidden');
+    input.value = '';
+    setTimeout(() => { input.classList.remove('shake'); input.focus(); }, 400);
+  }
+}
+
+function toggleEditMode() {
+  editMode = !editMode;
+  document.getElementById('editBanner').classList.toggle('visible', editMode);
+  // Update pencil button style
+  const btn = document.getElementById('editBtn');
+  if (editMode) { btn.style.borderColor='var(--accent-red)'; btn.style.color='var(--accent-red)'; }
+  else { btn.style.borderColor=''; btn.style.color=''; }
+  const t = TRACKERS.find(t => t.id === activeTrackerId);
+  if (t) renderTrail(t);
+}
+
+// =============================================
+// TRACKER TOGGLE
+// =============================================
+function buildTrackerToggle() {
+  // Single-tracker (Jim-only) view: no point in a one-option toggle — hide it.
+  if (TRACKERS.length < 2) { document.getElementById('trackerToggle').style.display = 'none'; return; }
+  document.getElementById('trackerToggle').innerHTML = TRACKERS.map(t => `
+    <button class="toggle-btn ${t.id===activeTrackerId?'active':''}" onclick="switchTracker('${t.id}')" data-tracker="${t.id}">
+      <span class="dot" style="background:${t.color}"></span>${t.name}
+    </button>`).join('');
+}
+
+function switchTracker(id) {
+  activeTrackerId = id;
+  document.querySelectorAll('#trackerToggle .toggle-btn').forEach(b => b.classList.toggle('active',b.dataset.tracker===id));
+  applyViewState(); updateInfoPanel(id); updateStats(); flyToActive();
+}
+
+function applyViewState() {
+  const id = activeTrackerId;
+  TRACKERS.forEach(t => {
+    const on=t.id===id, trail=on&&currentView==='history';
+    if(trailLayers[t.id]) trailLayers[t.id].setStyle({opacity:trail?0.9:0});
+    if(glowLayers[t.id]) glowLayers[t.id].setStyle({opacity:trail?0.15:0});
+    // Snapped route (gold traveled + soft-blue dashed remainder) follows the active tracker in
+    // BOTH views. The remaining line is two stacked polylines — keep them in lockstep.
+    if(traveledLayers[t.id]) traveledLayers[t.id].setStyle({opacity:on?1:0});
+    if(untraveledBaseLayers[t.id]) untraveledBaseLayers[t.id].setStyle({opacity:on?0.85:0});
+    if(untraveledLayers[t.id]) untraveledLayers[t.id].setStyle({opacity:on?0.95:0});
+    // Off-route detours + the per-point circles are history-view only.
+    if(offrouteLayers[t.id]){ if(trail) offrouteLayers[t.id].addTo(map); else map.removeLayer(offrouteLayers[t.id]); }
+    if(historyPointLayers[t.id]){ if(trail) historyPointLayers[t.id].addTo(map); else map.removeLayer(historyPointLayers[t.id]); }
+    if(markerLayers[t.id]){ if(on) markerLayers[t.id].addTo(map); else map.removeLayer(markerLayers[t.id]); }
+  });
+}
+
+function flyToActive() {
+  const data = getFilteredData(activeTrackerId);
+  if (!data || !data.length) { fitToRouteIfNoData(); return; }   // pre-launch: frame the route
+
+  const latest = data[data.length - 1];
+  isProgrammaticMove = true;   // our move — don't let the dragstart/zoomstart guard pause follow
+  if (EMBED_MODE) {
+    // Embedded widget: keep it tight on his recent position.
+    const recent = data.slice(-20);
+    if (recent.length === 1) map.flyTo([recent[0].latitude, recent[0].longitude], FOLLOW_ZOOM, {duration:1.2});
+    else map.flyToBounds(L.latLngBounds(recent.map(p => [p.latitude, p.longitude])), { padding:[60,60], maxZoom:14, duration:1.2 });
+    return;
+  }
+  // Frame him tightly at FOLLOW_ZOOM (identical to the auto-refresh recenter) so the
+  // phone view lands on Jim, not the whole US. Follow mode keeps this framing each poll.
+  map.flyTo([latest.latitude, latest.longitude], FOLLOW_ZOOM, { animate:true, duration:0.75 });
+}
+
+// =============================================
+// DATA FETCHING
+// =============================================
+async function fetchSpotData(tracker) {
+  if (!tracker.feedId) { trackerData[tracker.id]=generateDemoData(tracker.id); return; }
+  try {
+    const r=await fetch(`data/${tracker.id}.json?_=${Date.now()}`);
+    // The cron-managed JSON is the source of truth. A valid array — even empty
+    // (pre-launch, before Jim's first point) — is authoritative; do NOT fall
+    // through to the live SPOT API (which would resurrect stale points and have
+    // every viewer hammer SPOT directly). Only fall back on a real fetch failure.
+    if(r.ok){ const m=await r.json(); if(Array.isArray(m)){ if(m.length) m.sort((a,b)=>a.unixTime-b.unixTime); trackerData[tracker.id]=m; return; } }
+  } catch(e){}
+  try {
+    const r=await fetch(`https://api.findmespot.com/spot-main-web/consumer/rest-api/2.0/public/feed/${tracker.feedId}/message.json`);
+    const j=await r.json();
+    if(j.response&&j.response.feedMessageResponse){ let m=j.response.feedMessageResponse.messages.message; if(!Array.isArray(m)) m=[m]; m.sort((a,b)=>a.unixTime-b.unixTime); trackerData[tracker.id]=m; }
+    else { if(!trackerData[tracker.id]) trackerData[tracker.id]=[]; }
+  } catch(e){ if(!trackerData[tracker.id]) trackerData[tracker.id]=generateDemoData(tracker.id); }
+}
+
+async function loadAllTrackers() {
+  for (const t of TRACKERS) {
+    await fetchSpotData(t); renderTrail(t);
+    const d = trackerData[t.id]; lastLatestTs[t.id] = (d && d.length) ? d[d.length-1].unixTime : 0;
+  }
+  updateBaseRouteVisibility();
+  updateInfoPanel(activeTrackerId);
+  updateStats();
+  flyToActive(); // Zoom to live position after data loads
+  if (EMBED_MODE) updateEmbedBar();
+  startRefreshLoop();
+}
+
+// =============================================
+// AUTO-REFRESH + COUNTDOWN
+// =============================================
+function startRefreshLoop() {
+  if (dataRefreshTimer) clearInterval(dataRefreshTimer);
+  if (countdownTickTimer) clearInterval(countdownTickTimer);
+  nextRefreshAt = Date.now() + REFRESH_INTERVAL_MS;
+  refreshState = 'idle';
+  tickCountdown();
+  dataRefreshTimer = setInterval(refreshData, REFRESH_INTERVAL_MS);
+  countdownTickTimer = setInterval(tickCountdown, 1000);
+}
+
+// Re-fetch every tracker's cached JSON (cache-buster), re-match + re-render IN PLACE —
+// no flyTo/fit, so a user who has panned away keeps their view. Polls that bring no
+// new points (same latest timestamp AND same count) skip the re-render. Live/History
+// toggle is honored because renderTrail reads currentView.
+async function refreshData() {
+  refreshState = 'updating'; tickCountdown();
+  let ok = false;
+  for (const t of TRACKERS) {
+    try {
+      const r = await fetch(`data/${t.id}.json?t=${Date.now()}`);
+      if (!r.ok) continue;
+      const m = await r.json();
+      if (!Array.isArray(m)) continue;
+      ok = true;
+      if (m.length) m.sort((a,b)=>a.unixTime-b.unixTime);
+      const latestTs = m.length ? m[m.length-1].unixTime : 0;
+      const changed = latestTs !== (lastLatestTs[t.id]||0) || m.length !== (trackerData[t.id]||[]).length;
+      trackerData[t.id] = m;
+      lastLatestTs[t.id] = latestTs;
+      if (changed) renderTrail(t);
+    } catch (e) { /* network blip — handled below */ }
+  }
+  // Refresh the panel text every cycle so the "Xm ago" stays current even on a no-op.
+  updateBaseRouteVisibility();
+  updateInfoPanel(activeTrackerId);
+  updateStats();
+  if (EMBED_MODE) updateEmbedBar();
+  // Follow mode: re-center/zoom on Jim's latest point each poll — unless the user has
+  // panned/zoomed by hand (followMode=false until the next full page load).
+  if (followMode) {
+    const fd = getFilteredData(activeTrackerId);
+    if (fd && fd.length) {
+      const latest = fd[fd.length - 1];
+      isProgrammaticMove = true;
+      map.flyTo([latest.latitude, latest.longitude], FOLLOW_ZOOM, { animate:true, duration:0.75 });
+    }
+  }
+  if (ok) { refreshState = 'idle'; nextRefreshAt = Date.now() + REFRESH_INTERVAL_MS; }
+  else    { refreshState = 'failed'; }   // next interval recovers; no frozen 0:00
+  tickCountdown();
+}
+
+// Pre-launch countdown to RIDE_START. Ticks every second; auto-hides once it passes.
+function tickRideCountdown() {
+  const el = document.getElementById('countdownOverlay');
+  if (!el) return;
+  const diff = RIDE_START.getTime() - Date.now();
+  if (diff <= 0) { el.classList.remove('visible'); return; }   // green flag dropped
+  el.classList.add('visible');
+  const s = Math.floor(diff / 1000);
+  document.getElementById('cdDays').textContent = Math.floor(s / 86400);
+  document.getElementById('cdHours').textContent = String(Math.floor(s % 86400 / 3600)).padStart(2,'0');
+  document.getElementById('cdMins').textContent = String(Math.floor(s % 3600 / 60)).padStart(2,'0');
+  document.getElementById('cdSecs').textContent = String(s % 60).padStart(2,'0');
+  const w = document.getElementById('countdownWhen');
+  if (w && !w.textContent) w.textContent = RIDE_START_LABEL;
+}
+
+function tickCountdown() {
+  const el = document.getElementById('refreshCountdown');
+  if (!el) return;
+  if (refreshState === 'updating') { el.textContent = 'Updating…'; el.dataset.state = 'updating'; return; }
+  if (refreshState === 'failed')   { el.textContent = 'Update failed — retrying'; el.dataset.state = 'failed'; return; }
+  const remS = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
+  el.textContent = `Next update in ${Math.floor(remS/60)}:${String(remS%60).padStart(2,'0')}`;
+  el.dataset.state = 'idle';
+}
+
+// =============================================
+// EMBED BAR UPDATE
+// =============================================
+function updateEmbedBar() {
+  const tracker = TRACKERS.find(t => t.id === activeTrackerId);
+  const data = getFilteredData(activeTrackerId);
+  if (!data || !data.length) return;
+  const latest = data[data.length - 1];
+  const ago = Math.floor((Date.now() - latest.unixTime * 1000) / 60000);
+  const isLive = ago < 15, isRecent = ago < 60;
+
+  let agoText;
+  if (ago < 1) agoText = 'just now';
+  else if (ago < 60) agoText = `${ago}m ago`;
+  else if (ago < 1440) agoText = `${Math.floor(ago/60)}h ago`;
+  else agoText = `${Math.floor(ago/1440)}d ago`;
+
+  document.getElementById('embedStatusText').textContent = `Last update: ${agoText}`;
+
+  const badge = document.getElementById('embedLiveBadge');
+  const label = document.getElementById('embedLiveLabel');
+  if (isLive) {
+    label.textContent = 'LIVE';
+    badge.style.background = 'rgba(26,188,156,0.1)';
+    badge.style.borderColor = 'rgba(26,188,156,0.25)';
+    badge.style.color = '#1abc9c';
+  } else if (isRecent) {
+    label.textContent = 'RECENT';
+    badge.style.background = 'rgba(232,168,71,0.1)';
+    badge.style.borderColor = 'rgba(232,168,71,0.3)';
+    badge.style.color = '#e8a847';
+  } else {
+    label.textContent = 'OFFLINE';
+    badge.style.background = 'rgba(107,114,128,0.1)';
+    badge.style.borderColor = 'rgba(107,114,128,0.3)';
+    badge.style.color = '#6b7280';
+  }
+}
+
+// =============================================
+// RENDER
+// =============================================
+function renderTrail(tracker) {
+  const data = getFilteredData(tracker.id);
+  [trailLayers,glowLayers,markerLayers,historyPointLayers,traveledLayers,untraveledLayers,untraveledBaseLayers,offrouteLayers].forEach(s=>{ if(s[tracker.id]){map.removeLayer(s[tracker.id]);delete s[tracker.id];} });
+  if (!data || !data.length) return;
+
+  const on = tracker.id===activeTrackerId, trail = on && currentView==='history';
+
+  let snapPos = null;
+  if (routeReady && routeFlat.length > 1) {
+    // GPX loaded: snap the trail to the route (gold traveled + soft-blue dashed remainder).
+    snapPos = renderSnapped(tracker, data, on, trail);
+  } else if (!gpxPending) {
+    // No route AND not mid-load: original point-to-point trail (+ glow), history-view only.
+    // Gated on !gpxPending so we don't flash a gold straight line while the route is still
+    // loading — once it lands, renderSnapped draws the route-following line instead.
+    const coords = data.map(p=>[p.latitude,p.longitude]);
+    trailLayers[tracker.id] = L.polyline(coords,{color:tracker.color,weight:3,opacity:trail?0.9:0,lineJoin:'round'}).addTo(map);
+    glowLayers[tracker.id] = L.polyline(coords,{color:tracker.color,weight:10,opacity:trail?0.15:0}).addTo(map);
+  }
+
+  // Per-point breadcrumb circles are now ONLY drawn in admin edit mode — that's the only
+  // place they're needed (click a bad ping to remove it). The public view stays a clean
+  // gold line + current-position marker. (Easy to restore for everyone: drop the editMode
+  // guard.)
+  if (editMode) {
+    const pg = L.layerGroup();
+    data.forEach((p,i)=>{
+      const isLast=i===data.length-1, isFirst=i===0;
+      const cm = L.circleMarker([p.latitude,p.longitude],{
+        radius:isLast?10:isFirst?8:6, fillColor:tracker.color,
+        fillOpacity:isLast?1:0.5+(i/data.length)*0.4,
+        color:isLast?'#fff':tracker.color, weight:isLast?2.5:1, opacity:isLast?1:0.4
+      });
+      const time = new Date(p.unixTime*1000).toLocaleString();
+      let dist=0; for(let j=1;j<=i;j++) dist+=haversine(data[j-1].latitude,data[j-1].longitude,data[j].latitude,data[j].longitude);
+      const deleteBtn = `<button class="popup-delete-btn" onclick="removePointServer('${tracker.id}',${p.unixTime},${p.latitude},${p.longitude})">Remove Point</button>`;
+      cm.bindPopup(`<div style="line-height:1.6;min-width:140px;">
+        <strong style="color:${tracker.color}">Point ${i+1}${isLast?' (Latest)':isFirst?' (Start)':''}</strong><br>
+        <span style="color:#7a7d82;font-size:11px;">${p.messageType} &bull; ${time}</span><br>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7a7d82;">${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}</span><br>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:${tracker.color};">${dist.toFixed(1)} mi from start</span>
+        ${deleteBtn}
+      </div>`);
+      pg.addLayer(cm);
+    });
+    historyPointLayers[tracker.id] = pg;
+    if(on) pg.addTo(map);
+  }
+
+  const latest = data[data.length-1];
+  const agoMin = Math.floor((Date.now()-latest.unixTime*1000)/60000);
+  const isLive=agoMin<15, isRecent=agoMin<60;
+  const dotColor=isLive?tracker.color:isRecent?tracker.color:'#6b7280';
+  const dotOp=isLive?1:isRecent?0.7:0.5;
+  const border=isLive?'#fff':isRecent?'#ccc':'#888';
+  const anim=isLive?'animation:markerPulse 2s ease infinite;':'';
+  const glow=isLive?`box-shadow:0 0 12px ${tracker.color}88;`:isRecent?`box-shadow:0 0 6px ${tracker.color}44;`:'box-shadow:none;';
+  const agoTxt=!isLive?(agoMin<60?`${agoMin}m ago`:agoMin<1440?`${Math.floor(agoMin/60)}h ago`:`${Math.floor(agoMin/1440)}d ago`):'';
+  const staleLabel=!isLive?`<div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);background:${isRecent?'rgba(18,22,27,0.85)':'rgba(107,114,128,0.9)'};color:${isRecent?tracker.color:'#d1d5db'};font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;white-space:nowrap;">${agoTxt}</div>`:'';
+
+  const icon = L.divIcon({ className:'', html:`<div style="position:relative;width:28px;height:28px;">${staleLabel}<div style="position:absolute;inset:0;border-radius:50%;background:${dotColor};opacity:0.2;${anim}"></div><div style="position:absolute;top:6px;left:6px;width:16px;height:16px;border-radius:50%;background:${dotColor};opacity:${dotOp};border:2.5px solid ${border};${glow}"></div></div>`, iconSize:[28,28], iconAnchor:[14,14] });
+
+  // Sit the marker on the gold line (snapped position) when on-route; raw point otherwise.
+  const markerPos = snapPos || [latest.latitude, latest.longitude];
+  markerLayers[tracker.id] = L.marker(markerPos,{icon});
+  const freshLabel=isLive?'<span style="color:#1abc9c;">LIVE</span>':isRecent?'<span style="color:#e8a847;">RECENT</span>':'<span style="color:#6b7280;">LAST SEEN</span>';
+  markerLayers[tracker.id].bindPopup(`<div style="line-height:1.5;"><strong style="color:${tracker.color}">${tracker.name}</strong> ${freshLabel}<br><span style="color:#7a7d82;font-size:11px;">${latest.messageType} &bull; ${new Date(latest.unixTime*1000).toLocaleString()}</span><br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7a7d82;">${latest.latitude.toFixed(5)}, ${latest.longitude.toFixed(5)}</span></div>`);
+
+  if(on) markerLayers[tracker.id].addTo(map);
+}
+
+// Draw the snapped route for one tracker: white-dashed untraveled remainder (bottom),
+// gold-solid traveled prefix, then raw gray-dotted off-route detours. The traveled +
+// untraveled route shows in BOTH live and history (it replaces the old always-on route
+// line, now colored by progress); detours are history-only. Marker is added by the
+// caller, on top. Render order here = z-order (overlayPane draws in add order).
+function renderSnapped(tracker, data, on, trail) {
+  const matched = matchSequence(data);
+  let maxDist = -1;
+  for (let i = 0; i < matched.length; i++) {
+    if (!matched[i].offRoute && matched[i].distAlong > maxDist) maxDist = matched[i].distAlong;
+  }
+  trackerProgress[tracker.id] = maxDist >= 0 ? maxDist : 0;
+  const { traveled, untraveled } = splitRouteAt(maxDist >= 0 ? maxDist : 0);
+
+  // 1. Untraveled remainder — soft-blue SOLID underlay + lighter-blue DASHED overlay, stacked.
+  //    A plain white dash vanished on the light/terrain basemaps; the solid blue underlay keeps
+  //    the line readable on BOTH dark and light tiles while the dashed overlay preserves the
+  //    "route ahead" texture. Hue (blue) stays clearly distinct from the gold completed trail.
+  //    Drawn bottom-most so the gold traveled prefix + detours layer on top. Both halves track
+  //    the active tracker's visibility together (see applyViewState). Always present (active only).
+  untraveledBaseLayers[tracker.id] = L.polyline(untraveled, {
+    color:'#4A90D2', weight:4, opacity:on?0.85:0, lineCap:'round', lineJoin:'round'
+  }).addTo(map);
+  untraveledLayers[tracker.id] = L.polyline(untraveled, {
+    color:'#BFD8F5', weight:2, opacity:on?0.95:0, dashArray:'4 9', lineCap:'round', lineJoin:'round'
+  }).addTo(map);
+
+  // 2. Traveled prefix — solid golden-yellow, on top of the dashed remainder.
+  if (maxDist >= 0 && traveled.length > 1) {
+    traveledLayers[tracker.id] = L.polyline(traveled, {
+      color:'#e8a847', weight:4, opacity:on?1:0, lineCap:'round', lineJoin:'round'
+    }).addTo(map);
+  }
+
+  // 3. Off-route raw detours — faint gray dotted, history-view only.
+  const offSegs = buildOffrouteSegments(data, matched);
+  if (offSegs.length) {
+    const og = L.layerGroup();
+    offSegs.forEach(seg => L.polyline(seg, {
+      color:'#9aa0a6', weight:2, opacity:0.65, dashArray:'1 7', lineCap:'round'
+    }).addTo(og));
+    offrouteLayers[tracker.id] = og;
+    if (trail) og.addTo(map);
+  }
+
+  // Snapped current position: if the latest ping is on-route, return its position ON the
+  // route so the marker sits on the gold line (not ~tens of meters off at the raw GPS
+  // point). If he's currently off-route, return null → marker stays at the raw point.
+  const last = matched[matched.length - 1];
+  return (last && !last.offRoute) ? routePosAt(last.distAlong) : null;
+}
+
+// =============================================
+// ELEVATION STRIP (passive)
+// =============================================
+// Trail colors reused verbatim from renderSnapped(): traveled #e8a847, remaining #4A90D2.
+// Boundary + dot are driven by `frac` (0..1) — the SAME progress fraction the bar uses, so
+// the chart and the % bar can never disagree. The curve is downsampled (ROUTE_ELEV, 500 pts)
+// for the DRAWN path only; the boundary still maps to true distance-along-route via `frac`.
+let lastElevFrac = 0;
+function renderElevation(frac) {
+  const canvas = document.getElementById('elevCanvas');
+  if (!canvas || !Array.isArray(ROUTE_ELEV) || ROUTE_ELEV.length < 2) return;
+  lastElevFrac = Math.max(0, Math.min(1, frac || 0));
+  const wrap = canvas.parentElement;
+  const cssW = wrap.clientWidth, cssH = wrap.clientHeight;
+  if (cssW < 2 || cssH < 2) return;   // strip hidden (e.g. embed mode) — nothing to draw
+  const dpr = window.devicePixelRatio || 1;
+  const pxW = Math.round(cssW * dpr), pxH = Math.round(cssH * dpr);
+  if (canvas.width !== pxW || canvas.height !== pxH) { canvas.width = pxW; canvas.height = pxH; }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const n = ROUTE_ELEV.length;
+  const bx = lastElevFrac * cssW;            // completed/remaining boundary in px
+  const M_TO_FT = 3.28084;
+  const ftLabel = m => Math.round(m * M_TO_FT).toLocaleString('en-US') + ' ft';
+
+  // COLLAPSED SLIVER — drop the terrain/legend; keep just the colored split + position dot so
+  // the at-a-glance "where is he" read survives. Driven by measured height (the strip animates
+  // height via CSS; a transitionend re-render lands here once it's a sliver).
+  if (cssH < 40) {
+    const y = cssH / 2;
+    ctx.lineCap = 'round'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(bx, y); ctx.strokeStyle = 'rgba(232,168,71,0.95)'; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx, y); ctx.lineTo(cssW, y); ctx.strokeStyle = 'rgba(74,144,210,0.85)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx, y, 3.5, 0, Math.PI * 2); ctx.fillStyle = '#e8a847'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+    return;
+  }
+
+  const padT = 16, padB = 6;                 // headroom for the caption, small floor gap
+  const plotH = Math.max(1, cssH - padT - padB);
+  let mn = Infinity, mx = -Infinity, am = 0;
+  for (let i = 0; i < n; i++) { const e = ROUTE_ELEV[i]; if (e < mn) mn = e; if (e > mx) { mx = e; am = i; } }
+  const range = (mx - mn) || 1;
+  const xAt = i => (i / (n - 1)) * cssW;
+  const yAt = e => padT + plotH - ((e - mn) / range) * plotH;
+
+  // Closed area polygon (top curve down to the baseline), reused for each clipped fill.
+  const area = () => { ctx.beginPath(); ctx.moveTo(0, cssH); for (let i = 0; i < n; i++) ctx.lineTo(xAt(i), yAt(ROUTE_ELEV[i])); ctx.lineTo(cssW, cssH); ctx.closePath(); };
+  const topLine = () => { ctx.beginPath(); for (let i = 0; i < n; i++) { const x = xAt(i), y = yAt(ROUTE_ELEV[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } };
+
+  // Fills: gold for the traveled portion (left of bx), soft-blue for the remainder. Both
+  // semi-transparent so the translucent card (and the blurred map behind it) still read.
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, bx, cssH); ctx.clip(); area(); ctx.fillStyle = 'rgba(232,168,71,0.45)'; ctx.fill(); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.rect(bx, 0, cssW - bx, cssH); ctx.clip(); area(); ctx.fillStyle = 'rgba(74,144,210,0.30)'; ctx.fill(); ctx.restore();
+
+  // Crisper top stroke in the same two colors.
+  ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, bx, cssH); ctx.clip(); topLine(); ctx.strokeStyle = 'rgba(232,168,71,0.95)'; ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.rect(bx, 0, cssW - bx, cssH); ctx.clip(); topLine(); ctx.strokeStyle = 'rgba(74,144,210,0.85)'; ctx.stroke(); ctx.restore();
+
+  // --- Legend / scale (lightweight: caption + 1–2 gridlines + high-point label; no full axis) ---
+  // Faint dashed gridline at an elevation value, with an optional left-edge value label.
+  const gridline = (valM, label) => {
+    const gy = yAt(valM);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(cssW, gy); ctx.stroke();
+    ctx.restore();
+    if (label) {
+      ctx.font = '500 8px "IBM Plex Mono", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(180,184,190,0.5)'; ctx.fillText(label, 11, gy - 3);
+    }
+  };
+  gridline(mx, null);                        // top line at the high point (value shown by the summit label)
+  const midFt = Math.round((mx * M_TO_FT / 2) / 1000) * 1000;   // nearest 1000 ft below the peak
+  const midM = midFt / M_TO_FT;
+  if (midFt > 0 && midM > mn && midM < mx) gridline(midM, midFt.toLocaleString('en-US') + ' ft');
+
+  // Caption, top-left, matching the muted mono type treatment of the tiles' labels.
+  ctx.font = '600 8px "IBM Plex Mono", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(122,125,130,0.85)'; ctx.fillText('ELEVATION', 11, 11);
+
+  // High-point value near the summit of the curve, drawn with a shadow so it stays readable
+  // over the fill. Flip alignment near the right edge so it never clips.
+  const sx = xAt(am), rightish = sx > cssW * 0.72;
+  ctx.save();
+  ctx.font = '700 9px "IBM Plex Mono", monospace'; ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = rightish ? 'right' : 'left';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 3;
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fillText('▲ ' + ftLabel(mx), rightish ? sx - 4 : sx + 4, yAt(mx) + 11);
+  ctx.restore();
+
+  // Current-position dot, sitting on the curve at the boundary. Mirrors the legend's
+  // "Current location" swatch (gold fill, white ring).
+  const fi = lastElevFrac * (n - 1), i0 = Math.floor(fi), i1 = Math.min(n - 1, i0 + 1), ff = fi - i0;
+  const ey = ROUTE_ELEV[i0] + ff * (ROUTE_ELEV[i1] - ROUTE_ELEV[i0]);
+  const dy = yAt(ey);
+  ctx.beginPath(); ctx.arc(bx, dy, 4, 0, Math.PI * 2); ctx.fillStyle = '#e8a847'; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+}
+// Re-render on resize/orientation (canvas is pixel-sized; CSS width alone won't redraw it).
+let elevResizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(elevResizeTimer); elevResizeTimer = setTimeout(() => { renderElevation(lastElevFrac); layoutFloatingControls(); }, 150); });
+
+// Position the bottom-anchored floating controls (donate/legend stack, map-style button +
+// picker) just ABOVE the live info-panel, whose height varies by viewport and by the strip's
+// collapsed/expanded state. Measuring beats hardcoded offsets — those overlapped the strip's
+// collapse toggle on desktop, where the 4 stat cards make the panel taller than on mobile.
+// targetStripH (optional): when toggling, pass the strip's FINAL height so --panel-clear jumps
+// straight to its end value and the controls' CSS transition animates in lockstep with the
+// strip's height transition (offsetHeight mid-transition would otherwise lag).
+function layoutFloatingControls(targetStripH) {
+  const ip = document.getElementById('infoPanel');
+  if (!ip) return;
+  let h = ip.offsetHeight;
+  if (typeof targetStripH === 'number') {
+    const strip = document.getElementById('elevStrip');
+    if (strip) h = h - strip.offsetHeight + targetStripH;   // swap current strip height for its target
+  }
+  document.documentElement.style.setProperty('--panel-clear', h + 'px');
+}
+
+// Apply collapsed/expanded: toggle the class, reflow the floating controls against the panel's
+// final height, and update the toggle's a11y state.
+function applyElevCollapsed(collapsed) {
+  const strip = document.getElementById('elevStrip');
+  if (strip) strip.classList.toggle('collapsed', collapsed);
+  layoutFloatingControls(collapsed ? 12 : 90);   // 12 = sliver, 90 = full (matches the CSS heights)
+  const tog = document.getElementById('elevToggle');
+  if (tog) { tog.setAttribute('aria-expanded', collapsed ? 'false' : 'true'); tog.setAttribute('aria-label', (collapsed ? 'Expand' : 'Collapse') + ' elevation profile'); }
+}
+function toggleElev() {
+  const collapsed = !document.getElementById('elevStrip').classList.contains('collapsed');
+  applyElevCollapsed(collapsed);
+  localStorage.setItem('elevCollapsed', collapsed ? '1' : '0');   // same flat localStorage pattern as mapStyle etc.
+  renderElevation(lastElevFrac);   // redraw now at the pre-transition size; transitionend redraws at final size
+}
+// The strip animates height via CSS; once it settles, re-render the canvas at the final size
+// and re-measure the panel so the floating controls land exactly (covers font/async reflow too).
+(function () {
+  const strip = document.getElementById('elevStrip');
+  if (strip) strip.addEventListener('transitionend', e => { if (e.propertyName === 'height') { renderElevation(lastElevFrac); layoutFloatingControls(); } });
+})();
+// Web fonts (Archivo Black / IBM Plex Mono) load async and change the stat-card heights after
+// first paint, so re-measure once they're ready and on full load.
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => layoutFloatingControls());
+window.addEventListener('load', () => layoutFloatingControls());
+
+// =============================================
+// STATS
+// =============================================
+function updateStats() {
+  // Empty data (pre-launch / no points yet) is a valid state: show 0 completed,
+  // full route remaining, 0% — don't bail, or the stats stay stuck on '--'.
+  const data = getFilteredData(activeTrackerId) || [];
+  const totalRoute=gpxRouteDistance||0;
+  let completed=0;
+  if(routeReady && routeFlat.length>1 && routeTotalM>0){
+    // Exact along-route progress: distAlong of the latest matched point. Scaled to the
+    // authoritative total (route.gpx is downsampled, so its measured length is short),
+    // which keeps the gold line, the % bar, and the mileage all in agreement.
+    const frac=Math.max(0,Math.min(1,(trackerProgress[activeTrackerId]||0)/routeTotalM));
+    completed=totalRoute>0?frac*totalRoute:(trackerProgress[activeTrackerId]||0)/1609.34;
+  } else {
+    // No route loaded: fall back to summed straight-line distance between points.
+    for(let i=1;i<data.length;i++) completed+=haversine(data[i-1].latitude,data[i-1].longitude,data[i].latitude,data[i].longitude);
+  }
+  const todayStart=new Date(); todayStart.setHours(0,0,0,0);
+  const todayUnix=Math.floor(todayStart.getTime()/1000);
+  let todayDist=0;
+  const todayPts=data.filter(p=>p.unixTime>=todayUnix);
+  for(let i=1;i<todayPts.length;i++) todayDist+=haversine(todayPts[i-1].latitude,todayPts[i-1].longitude,todayPts[i].latitude,todayPts[i].longitude);
+  const remaining=Math.max(0,totalRoute-completed);
+  const pct=totalRoute>0?Math.min(100,(completed/totalRoute)*100):0;
+  document.getElementById('statTotal').textContent=totalRoute>0?totalRoute.toFixed(0):'--';
+  document.getElementById('statCompleted').textContent=completed.toFixed(1);
+  document.getElementById('statToday').textContent=todayDist.toFixed(1);
+  document.getElementById('statRemaining').textContent=totalRoute>0?remaining.toFixed(0):'--';
+  document.getElementById('progressFill').style.width=`${pct}%`;
+  document.getElementById('progressText').textContent=totalRoute>0?`${completed.toFixed(0)} of ${totalRoute.toFixed(0)} mi`:`${completed.toFixed(1)} mi tracked`;
+  document.getElementById('progressPct').textContent=totalRoute>0?`${pct.toFixed(1)}%`:'';
+  // Mobile compact summary — same live numbers, just the two that matter at a glance.
+  document.getElementById('statCompactCompleted').textContent=completed.toFixed(1);
+  document.getElementById('statCompactPct').textContent=totalRoute>0?`${pct.toFixed(0)}%`:'--%';
+  // Elevation strip shares the progress fraction (pct/100) so it stays in lockstep with the bar.
+  renderElevation(totalRoute>0?pct/100:0);
+  layoutFloatingControls();   // panel text/height may have shifted (battery wrap, value widths)
+}
+
+// =============================================
+// INFO PANEL
+// =============================================
+function updateInfoPanel(trackerId) {
+  const data=getFilteredData(trackerId);
+  if(!data||!data.length){
+    // Pre-launch empty state: no points yet — show a neutral "awaiting" state
+    // rather than a misleading LIVE/GOOD on stale defaults.
+    const be=document.getElementById('batteryDisplay'); be.className='battery'; be.style.opacity='0.4';
+    document.getElementById('batteryText').textContent='—';
+    document.getElementById('lastUpdate').textContent='Awaiting first point';
+    const ll=document.getElementById('liveLabel'),ld=document.querySelector('.live-dot'),lb=document.querySelector('.live-badge');
+    ll.textContent='AWAITING SIGNAL'; lb.style.borderColor='rgba(107,114,128,0.3)'; lb.style.background='rgba(107,114,128,0.1)'; lb.style.color='#6b7280'; ld.style.background='#6b7280'; ld.style.animation='none';
+    return;
+  }
+  document.getElementById('batteryDisplay').style.opacity='';
+  const latest=data[data.length-1];
+  const battEl=document.getElementById('batteryDisplay'),battText=document.getElementById('batteryText');
+  battText.textContent=latest.batteryState||'UNKNOWN';
+  battEl.className='battery '+(latest.batteryState==='GOOD'?'good':latest.batteryState==='LOW'?'low':'critical');
+  const ago=Math.floor((Date.now()-latest.unixTime*1000)/60000);
+  let agoText; if(ago<1) agoText='just now'; else if(ago<60) agoText=`${ago}m ago`; else if(ago<1440) agoText=`${Math.floor(ago/60)}h ${ago%60}m ago`; else agoText=`${Math.floor(ago/1440)}d ago`;
+  document.getElementById('lastUpdate').textContent=agoText;
+  const liveLabel=document.getElementById('liveLabel'),liveDot=document.querySelector('.live-dot'),liveBadge=document.querySelector('.live-badge');
+  const tracker=TRACKERS.find(t=>t.id===trackerId);
+  if(!tracker.feedId){ liveLabel.textContent='DEMO'; liveBadge.style.borderColor='rgba(107,114,128,0.4)'; liveBadge.style.background='rgba(107,114,128,0.1)'; liveBadge.style.color='#6b7280'; liveDot.style.background='#6b7280'; liveDot.style.animation='none'; }
+  else if(ago<15){ liveLabel.textContent='LIVE'; liveBadge.style.borderColor='rgba(26,188,156,0.25)'; liveBadge.style.background='rgba(26,188,156,0.1)'; liveBadge.style.color='#1abc9c'; liveDot.style.background='#1abc9c'; liveDot.style.animation='pulse 2s ease-in-out infinite'; }
+  else if(ago<60){ liveLabel.textContent='RECENT'; liveBadge.style.borderColor='rgba(232,168,71,0.3)'; liveBadge.style.background='rgba(232,168,71,0.1)'; liveBadge.style.color='#e8a847'; liveDot.style.background='#e8a847'; liveDot.style.animation='none'; }
+  else { liveLabel.textContent='LAST SEEN'; liveBadge.style.borderColor='rgba(107,114,128,0.3)'; liveBadge.style.background='rgba(107,114,128,0.1)'; liveBadge.style.color='#6b7280'; liveDot.style.background='#6b7280'; liveDot.style.animation='none'; }
+}
+
+// =============================================
+// CONFIG
+// =============================================
+function openConfig() {
+  const c=document.getElementById('configFields');
+  c.innerHTML=TRACKERS.map(t=>`<label>${t.name} — SPOT Feed ID</label><input type="text" id="cfg_${t.id}" value="${t.feedId}" placeholder="e.g. 0onlLopfoM4bG5jXvWRE8H0Obd0oMxMBq">`).join('');
+  document.getElementById('gpxUrlInput').value=localStorage.getItem('gpxUrl')||'';
+  document.getElementById('manualDistInput').value=localStorage.getItem('manualRouteDist')||'';
+  const totalHidden=Object.values(hiddenPoints).reduce((a,b)=>a+b.length,0);
+  document.getElementById('hiddenCount').textContent=`${totalHidden} local point${totalHidden!==1?'s':''} hidden`;
+  // Server-side removed points apply to all viewers — show that count too.
+  fetch(`${PHOTO_API}/excluded-points`).then(r=>r.json()).then(a=>{
+    const n=Array.isArray(a)?a.length:0;
+    document.getElementById('hiddenCount').textContent=`${n} point${n!==1?'s':''} removed for all viewers${totalHidden?` (+${totalHidden} local)`:''}`;
+  }).catch(()=>{});
+  document.getElementById('configOverlay').classList.add('open');
+  document.getElementById('gpxFileInput').onchange=function(e){ const file=e.target.files[0]; if(!file) return; const reader=new FileReader(); reader.onload=function(ev){localStorage.setItem('gpxData',ev.target.result);}; reader.readAsText(file); };
+}
+
+function closeConfig() { document.getElementById('configOverlay').classList.remove('open'); }
+
+function saveConfig() {
+  TRACKERS.forEach(t=>{ const v=document.getElementById('cfg_'+t.id).value.trim(); t.feedId=v; localStorage.setItem('spot_feed_'+t.id,v); });
+  const gpxUrl=document.getElementById('gpxUrlInput').value.trim();
+  if(gpxUrl) localStorage.setItem('gpxUrl',gpxUrl); else localStorage.removeItem('gpxUrl');
+  const manualDist=document.getElementById('manualDistInput').value.trim();
+  if(manualDist){ localStorage.setItem('manualRouteDist',manualDist); gpxRouteDistance=parseFloat(manualDist); } else { localStorage.removeItem('manualRouteDist'); gpxRouteDistance=ROUTE_MILES; }
+  closeConfig();
+  [trailLayers,glowLayers,markerLayers,historyPointLayers,traveledLayers,untraveledLayers,untraveledBaseLayers,offrouteLayers].forEach(s=>Object.keys(s).forEach(k=>{if(s[k])map.removeLayer(s[k]);}));
+  trailLayers={}; glowLayers={}; markerLayers={}; historyPointLayers={}; traveledLayers={}; untraveledLayers={}; untraveledBaseLayers={}; offrouteLayers={};
+  // Reset map-matching state so the (possibly new) GPX re-flattens from scratch.
+  routeFlat=[]; routeReady=false; routeTotalM=0; trackerProgress={};
+  loadGPX(); loadAllTrackers();
+}
+
+// =============================================
+// UTIL
+// =============================================
+function haversine(lat1,lon1,lat2,lon2) {
+  const R=3958.8,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+// Same formula, meters — used by the map-matching geometry.
+function haversineM(lat1,lon1,lat2,lon2) {
+  const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// =============================================
+// PHOTO MARKERS
+// =============================================
+// ---------------------------------------------------------------------------
+// OFFSET + LEADER-LINE + PIXEL-SPACE CLUSTERING
+// ---------------------------------------------------------------------------
+// Jim's complaint: photo/video thumbs sat ON the GPX line and hid it, crowding
+// badly on mobile. Fix, in two combined layers (all ABOVE the basemap, renderer-
+// agnostic — touches NOTHING in setMapStyle/PMTiles/trail/follow/embed):
+//   1. Every thumb renders OFFSET off the trail (OFFSET_PX perpendicular to the
+//      local route direction, on the emptier side) with a thin leader line + a
+//      small dot back at its true GPS point — always, not just on overlap.
+//   2. When offset thumbs still collide at the current zoom they collapse into a
+//      teal count badge. Tap a small badge (<SPIDERFY_MAX) to spiderfy (fan the
+//      members out in a ring with leaders); a big badge (>=SPIDERFY_MAX) zooms to
+//      fit instead of starbursting.
+// Clustering runs in PIXEL space at the current zoom and recomputes on zoomend/
+// moveend, so it's automatic and continuous as the user pans/zooms.
+const OFFSET_PX    = 34;   // perpendicular offset of a standalone thumb off the trail
+const COLLIDE_PX   = 48;   // offset anchors closer than this (px) collapse into a badge
+                           //   (thumbs are 44px, so ~48px keeps them from visually overlapping)
+const SPIDER_RADIUS= 46;   // base spiderfy ring radius (grows for bigger groups)
+const SPIDERFY_MAX = 10;   // groups >= this zoom-to-fit instead of fanning out
+const LEADER_COLOR = 'rgba(255,255,255,0.55)';  // readable on the dark default basemap
+const LEADER_WEIGHT= 1;
+
+let photoMarkers = {};       // id -> marker, for the gallery's "See on map" deep-link
+let photoFocused = false;    // only auto-focus a ?photo deep-link once
+let photoEntries = [];       // [{p,key,lat,lng,latlng,marker,routeIdx,vA,vB,winC, ...px}]
+let photoClusterLayer = null;// single layerGroup holding leaders+dots+thumbs+badges
+let spiderfy = null;         // {ids:Set, center:LatLng} while a badge is fanned open
+
+async function loadPhotos() {
+  try {
+    const resp=await fetch(`photos/manifest.json?_=${Date.now()}`);
+    if(!resp.ok) return;
+    const photos=await resp.json();
+    renderPhotos(photos.filter(p=>p.hasGPS));
+  } catch(e){}
+}
+
+// Build the photo/video thumb marker (poster-frame + play badge for video, inline
+// streaming/photo popup) — unchanged behavior, just extracted so the cluster layer
+// can reposition the same marker object (keeps popups/video DOM alive across recompute).
+function buildPhotoMarker(p) {
+  const isVid = p.type === 'video';
+  const thumbUrl = isVid ? p.poster : `photos/thumbs/${p.filename}`;
+  const playBadge = isVid ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><div style="width:0;height:0;border-style:solid;border-width:6px 0 6px 10px;border-color:transparent transparent transparent #fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.7));margin-left:2px;"></div></div>` : '';
+  const icon=L.divIcon({ className:'', html:`<div style="position:relative;width:44px;height:44px;border-radius:8px;overflow:hidden;border:2.5px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,0.5);cursor:pointer;background:#222;"><img src="${thumbUrl}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">${playBadge}</div>`, iconSize:[44,44], iconAnchor:[22,22] });
+  // zIndexOffset lifts photo markers above the current-location GPS dot (default offset 0)
+  // so a photo that overlaps Jim's latest position stays clickable instead of the dot
+  // swallowing the tap. Blog markers sit one notch higher still (see loadBlogMarkers).
+  const marker=L.marker([p.latitude,p.longitude],{icon,zIndexOffset:1000});
+  const date=new Date(p.timestamp).toLocaleDateString();
+  const time=new Date(p.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const media = isVid
+    ? `<video controls playsinline preload="metadata" src="${p.video}" poster="${p.poster}" style="width:100%;border-radius:8px;margin-bottom:8px;background:#000;"></video>`
+    : `<img src="photos/full/${p.filename}" style="width:100%;border-radius:8px;margin-bottom:8px;cursor:pointer;" onclick="window.open('photos/full/${p.filename}','_blank')">`;
+  marker.bindPopup(`<div style="text-align:center;max-width:260px;">${media}${p.caption?`<div style="font-weight:600;margin-bottom:4px;">${p.caption}</div>`:''}<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#7a7d82;">${p.uploader} &bull; ${date} ${time}</div></div>`,{maxWidth:280});
+  return marker;
+}
+
+function renderPhotos(photos) {
+  photoMarkers={};
+  photoEntries=[];
+  spiderfy=null;
+  if(!photoClusterLayer){ photoClusterLayer=L.layerGroup().addTo(map); }
+  photoClusterLayer.clearLayers();
+  if(!photos || !photos.length){ return; }
+  photos.forEach((p,i)=>{
+    const lat=Number(p.latitude), lng=Number(p.longitude);
+    if(!Number.isFinite(lat)||!Number.isFinite(lng)) return;   // no usable GPS -> not plotted (unchanged)
+    const marker=buildPhotoMarker(p);
+    const key=p.id || ('idx'+i);
+    photoEntries.push({ p, key, lat, lng, latlng:L.latLng(lat,lng), marker, routeIdx:-1, vA:null, vB:null, winC:null });
+    if(p.id) photoMarkers[p.id]=marker;
+  });
+  assignRouteIndices();
+  recomputePhotoClusters();
+  maybeFocusPhoto();
+}
+
+// Per-entry nearest-route geometry. Zoom-INDEPENDENT (nearest vertex + a window
+// centroid in lat/lng), so it's computed once per photo/route load, not per pan.
+// Stores the two neighbor vertices (for the local tangent) and the centroid of a
+// window of route vertices (to pick the emptier offset side at recompute time).
+function assignRouteIndices() {
+  if(!routeReady || routeFlat.length<2){
+    photoEntries.forEach(e=>{ e.routeIdx=-1; e.vA=null; e.vB=null; e.winC=null; });
+    return;
+  }
+  const W=30;
+  photoEntries.forEach(e=>{
+    let best=-1, bd=Infinity;
+    const coslat=Math.cos(e.lat*Math.PI/180);
+    for(let i=0;i<routeFlat.length;i++){
+      const dla=routeFlat[i].lat-e.lat, dlo=(routeFlat[i].lng-e.lng)*coslat;
+      const dd=dla*dla+dlo*dlo;
+      if(dd<bd){ bd=dd; best=i; }
+    }
+    e.routeIdx=best;
+    const a=Math.max(0,best-1), b=Math.min(routeFlat.length-1,best+1);
+    e.vA=L.latLng(routeFlat[a].lat, routeFlat[a].lng);
+    e.vB=L.latLng(routeFlat[b].lat, routeFlat[b].lng);
+    let sla=0, slo=0, cnt=0;
+    for(let i=Math.max(0,best-W);i<=Math.min(routeFlat.length-1,best+W);i++){ sla+=routeFlat[i].lat; slo+=routeFlat[i].lng; cnt++; }
+    e.winC = cnt ? L.latLng(sla/cnt, slo/cnt) : null;
+  });
+}
+
+// Offset anchor (px) for one entry at the current zoom: OFFSET_PX along the normal
+// to the local trail tangent, flipped toward whichever side faces AWAY from the route
+// bulk (the window centroid). No route yet -> a fixed up-right offset.
+function computeAnchorPx(e, truePx) {
+  let nx, ny;
+  if(e.routeIdx>=0 && e.vA && e.vB){
+    const a=map.latLngToLayerPoint(e.vA), b=map.latLngToLayerPoint(e.vB);
+    let dx=b.x-a.x, dy=b.y-a.y;
+    const len=Math.hypot(dx,dy)||1; dx/=len; dy/=len;
+    nx=-dy; ny=dx;   // unit normal to the tangent
+    if(e.winC){
+      const c=map.latLngToLayerPoint(e.winC);
+      const dot=nx*(c.x-truePx.x)+ny*(c.y-truePx.y);
+      if(dot>0){ nx=-nx; ny=-ny; }   // route bulk on +normal side -> offset the other way
+    }
+  } else {
+    nx=0.7071; ny=-0.7071;   // fallback: up-right
+  }
+  return L.point(truePx.x + nx*OFFSET_PX, truePx.y + ny*OFFSET_PX);
+}
+
+// THE CORE: project every offset anchor to px at the current zoom, greedily group
+// anchors within COLLIDE_PX, render group-of-1 as an offset thumb + leader + dot and
+// group-of->1 as a teal count badge. Spiderfied members are pulled out and fanned.
+// Rebuilds the whole layer each call so nothing is ever left orphaned on pan/zoom.
+function recomputePhotoClusters() {
+  if(!map || !photoClusterLayer) return;
+  photoClusterLayer.clearLayers();
+  if(!photoEntries.length) return;
+  photoEntries.forEach(e=>{
+    e._truePt = map.latLngToLayerPoint(e.latlng);
+    e._anchorPx = computeAnchorPx(e, e._truePt);
+    e._anchorLatLng = map.layerPointToLatLng(e._anchorPx);
+  });
+  const spiderIds = spiderfy ? spiderfy.ids : null;
+  if(spiderfy) renderSpiderfy();
+  const list = photoEntries.filter(e=> !(spiderIds && spiderIds.has(e.key)));
+  const n=list.length, used=new Array(n).fill(false);
+  for(let i=0;i<n;i++){
+    if(used[i]) continue;
+    used[i]=true;
+    const group=[list[i]];
+    const sx=list[i]._anchorPx.x, sy=list[i]._anchorPx.y;
+    for(let j=i+1;j<n;j++){
+      if(used[j]) continue;
+      const dx=list[j]._anchorPx.x-sx, dy=list[j]._anchorPx.y-sy;
+      if(dx*dx+dy*dy < COLLIDE_PX*COLLIDE_PX){ used[j]=true; group.push(list[j]); }
+    }
+    if(group.length===1) renderStandalone(group[0]);
+    else renderBadge(group);
+  }
+}
+
+// A leader line (true GPS point -> offset anchor) + a small filled dot at the true
+// point + the thumb itself at the anchor. Leader/dot are non-interactive so taps fall
+// through to the thumb.
+function renderStandalone(e) {
+  const leader=L.polyline([e.latlng, e._anchorLatLng], {color:LEADER_COLOR, weight:LEADER_WEIGHT, opacity:1, interactive:false});
+  const dot=L.circleMarker(e.latlng, {radius:2, stroke:false, fillColor:LEADER_COLOR, fillOpacity:0.95, interactive:false});
+  e.marker.setLatLng(e._anchorLatLng);
+  photoClusterLayer.addLayer(leader);
+  photoClusterLayer.addLayer(dot);
+  photoClusterLayer.addLayer(e.marker);
+}
+
+// One calm teal count badge at the group's anchor-centroid. No per-member leaders
+// while collapsed (kept deliberately quiet). Tapping it spiderfies / zooms to fit.
+function renderBadge(group) {
+  let cx=0, cy=0;
+  group.forEach(e=>{ cx+=e._anchorPx.x; cy+=e._anchorPx.y; });
+  cx/=group.length; cy/=group.length;
+  const cLatLng=map.layerPointToLatLng(L.point(cx,cy));
+  const icon=L.divIcon({ className:'', iconSize:[30,30], iconAnchor:[15,15],
+    html:`<div style="width:30px;height:30px;border-radius:50%;background:#1abc9c;border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Work Sans',sans-serif;font-weight:700;font-size:13px;line-height:1;cursor:pointer;">${group.length}</div>` });
+  const badge=L.marker(cLatLng, {icon, zIndexOffset:2000});
+  const memberLatLngs=group.map(e=>e.latlng);
+  const keys=group.map(e=>e.key);
+  badge.on('click', (ev)=>{ if(ev&&ev.originalEvent) L.DomEvent.stopPropagation(ev); onBadgeClick(keys, cLatLng, memberLatLngs); });
+  photoClusterLayer.addLayer(badge);
+}
+
+function onBadgeClick(keys, cLatLng, memberLatLngs) {
+  spiderfy=null;   // collapse any open fan first
+  if(keys.length>=SPIDERFY_MAX){
+    // Big cluster: zoom to fit; the resulting moveend recompute splits it apart.
+    map.fitBounds(L.latLngBounds(memberLatLngs), {padding:[70,70], maxZoom:17});
+    return;
+  }
+  spiderfy={ ids:new Set(keys), center:cLatLng };
+  recomputePhotoClusters();
+}
+
+// Fan the spiderfied members out in a ring around the badge centroid, each with a
+// leader back to its true GPS point. A small ring marker at the center collapses it.
+function renderSpiderfy() {
+  const members=photoEntries.filter(e=>spiderfy.ids.has(e.key));
+  if(!members.length){ spiderfy=null; return; }
+  const c=map.latLngToLayerPoint(spiderfy.center);
+  const n=members.length;
+  const radius=Math.min(120, SPIDER_RADIUS + Math.max(0,n-3)*8);
+  const ring=L.circleMarker(spiderfy.center, {radius:6, color:'#1abc9c', weight:2.5, fillColor:'#1abc9c', fillOpacity:0.25});
+  ring.on('click', (ev)=>{ if(ev&&ev.originalEvent) L.DomEvent.stopPropagation(ev); spiderfy=null; recomputePhotoClusters(); });
+  photoClusterLayer.addLayer(ring);
+  members.forEach((e,i)=>{
+    const ang=-Math.PI/2 + 2*Math.PI*i/n;
+    const px=L.point(c.x+radius*Math.cos(ang), c.y+radius*Math.sin(ang));
+    const ll=map.layerPointToLatLng(px);
+    const leader=L.polyline([e.latlng, ll], {color:LEADER_COLOR, weight:LEADER_WEIGHT, opacity:1, interactive:false});
+    const dot=L.circleMarker(e.latlng, {radius:2, stroke:false, fillColor:LEADER_COLOR, fillOpacity:0.95, interactive:false});
+    e.marker.setLatLng(ll);
+    photoClusterLayer.addLayer(leader);
+    photoClusterLayer.addLayer(dot);
+    photoClusterLayer.addLayer(e.marker);
+  });
+}
+
+// "See on map" deep-link from the gallery: tracker.html?photo=<id> flies to that
+// photo's true location and opens its popup. At zoom 16 the markers are essentially
+// always standalone, so the thumb is on the map and the popup opens.
+function maybeFocusPhoto() {
+  if (photoFocused) return;
+  const pid = _params.get('photo');
+  if (!pid || !photoMarkers[pid]) return;
+  photoFocused = true;
+  const m = photoMarkers[pid];
+  const entry = photoEntries.find(e=>e.p.id===pid);
+  map.flyTo(entry ? entry.latlng : m.getLatLng(), 16, { duration:1.2 });
+  setTimeout(() => { recomputePhotoClusters(); if(map.hasLayer(m)) m.openPopup(); }, 1300);
+}
+
+setInterval(loadPhotos, POLL_INTERVAL);
+
+// =============================================
+// BLOG MARKERS — Jim's EOD posts (data/blog.json, written by blog.html via photo-server)
+// =============================================
+let blogLayer = null;   // own Leaflet layer, always-on (toggle later if desired)
+async function loadBlogMarkers() {
+  try {
+    const resp = await fetch(`data/blog.json?_=${Date.now()}`);
+    if (!resp.ok) return;                       // 404 until the first entry exists — skip gracefully
+    const entries = await resp.json();
+    if (!Array.isArray(entries) || !entries.length) return;
+    if (blogLayer) { map.removeLayer(blogLayer); blogLayer = null; }
+    blogLayer = L.layerGroup();
+    entries.forEach(e => {
+      const lat = Number(e.lat), lng = Number(e.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const icon = L.divIcon({ className:'', html:`<div style="width:30px;height:30px;border-radius:50%;background:#1abc9c;border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;">📖</div>`, iconSize:[30,30], iconAnchor:[15,15] });
+      // Above both the GPS dot (0) and photo markers (1000) so an end-of-day blog pin that
+      // lands on Jim's current position stays the clickable one.
+      const m = L.marker([lat, lng], { icon, zIndexOffset:1100 });
+      const noteHtml = e.note ? `${e.note}<br>` : '';
+      m.bindPopup(`<div style="line-height:1.5;max-width:230px;"><strong>${e.title||''}</strong><br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7a7d82;">${e.date||''}</span><br>${noteHtml}<a href="${e.url}" target="_blank" rel="noopener" style="color:#1abc9c;font-weight:600;">Read post →</a></div>`, { maxWidth:260 });
+      blogLayer.addLayer(m);
+    });
+    blogLayer.addTo(map);
+  } catch (e) {}
+}
+setInterval(loadBlogMarkers, POLL_INTERVAL);
+
+const style=document.createElement('style');
+style.textContent=`@keyframes markerPulse{0%{transform:scale(1);opacity:0.2}50%{transform:scale(2.2);opacity:0}100%{transform:scale(1);opacity:0}}`;
+document.head.appendChild(style);
+
+init();
+loadPhotos();
+loadBlogMarkers();
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PuppyRide 2026 — Cross-Country Ride</title>
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --teal: #1abc9c;
+      --teal-dark: #16a085;
+      --teal-glow: rgba(26,188,156,0.18);
+      --bg: #0f1923;
+      --card: #162230;
+      --card-border: rgba(26,188,156,0.22);
+      --text: #e8f4f0;
+      --muted: #7a9e94;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Work Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    .logo-area {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .logo-area .paw {
+      font-size: 52px;
+      line-height: 1;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 0 16px var(--teal));
+    }
+
+    .logo-area h1 {
+      font-size: clamp(2rem, 6vw, 3rem);
+      font-weight: 800;
+      color: var(--teal);
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+    }
+
+    .logo-area .subtitle {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: 0.3px;
+    }
+
+    .nav-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .nav-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 28px 16px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      text-decoration: none;
+      color: var(--text);
+      font-family: 'Work Sans', sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      letter-spacing: 0.2px;
+      transition: background 0.18s, border-color 0.18s, transform 0.14s, box-shadow 0.18s;
+      cursor: pointer;
+    }
+
+    .nav-btn:hover, .nav-btn:focus {
+      background: rgba(26,188,156,0.12);
+      border-color: var(--teal);
+      box-shadow: 0 0 20px var(--teal-glow);
+      transform: translateY(-2px);
+      outline: none;
+    }
+
+    .nav-btn:active {
+      transform: translateY(0);
+    }
+
+    .nav-btn .icon {
+      font-size: 2rem;
+      line-height: 1;
+    }
+
+    .nav-btn .label {
+      color: var(--text);
+    }
+
+    .nav-btn .desc {
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: var(--muted);
+      margin-top: -4px;
+    }
+
+    /* Tracker button gets teal accent */
+    .nav-btn.primary {
+      border-color: rgba(26,188,156,0.5);
+      background: rgba(26,188,156,0.07);
+    }
+
+    /* 5th button spans the full row to balance the 2-col grid */
+    .nav-btn.span-2 { grid-column: 1 / -1; }
+
+    .footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .footer a {
+      color: var(--teal);
+      text-decoration: none;
+    }
+
+    .footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 360px) {
+      .nav-grid { grid-template-columns: 1fr; max-width: 280px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo-area">
+    <div class="paw">🐾</div>
+    <h1>PuppyRide 2026</h1>
+    <p class="subtitle">Coast-to-coast ride for <a href="https://www.seeingeye.org" target="_blank" rel="noopener" style="color:var(--teal);text-decoration:none;">The Seeing Eye</a></p>
+  </div>
+
+  <nav class="nav-grid" aria-label="Site navigation">
+    <a href="tracker.html" class="nav-btn primary">
+      <span class="icon">🗺️</span>
+      <span class="label">Live Tracker</span>
+      <span class="desc">GPS map & route</span>
+    </a>
+    <a href="gallery.html" class="nav-btn">
+      <span class="icon">📸</span>
+      <span class="label">Gallery</span>
+      <span class="desc">Photos from the road</span>
+    </a>
+    <a href="upload.html" class="nav-btn">
+      <span class="icon">⬆️</span>
+      <span class="label">Upload</span>
+      <span class="desc">Add photos</span>
+    </a>
+    <a href="admin.html" class="nav-btn">
+      <span class="icon">⚙️</span>
+      <span class="label">Admin</span>
+      <span class="desc">Manage & settings</span>
+    </a>
+    <a href="blog.html" class="nav-btn span-2">
+      <span class="icon">📝</span>
+      <span class="label">Blog</span>
+      <span class="desc">Jim's daily posts</span>
+    </a>
+  </nav>
+
+  <footer class="footer">
+    Tracking provided by&nbsp;
+    <a href="https://www.happilyrunning.com" target="_blank" rel="noopener">Happily Running</a>
+    &nbsp;·&nbsp; Benefiting <a href="https://www.seeingeye.org" target="_blank" rel="noopener">The Seeing Eye, Inc.</a>
+  </footer>
+
+</body>
+</html>

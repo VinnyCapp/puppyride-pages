@@ -1,0 +1,18 @@
+# Heavy / Dell-origin assets are intentionally NOT part of the Pages bundle.
+# The Pages copy is media-light: full-res photos, videos, the pmtiles base map,
+# and the full-resolution GPX stay on the Dell (served from puppyride.vinnycapp.com)
+# and are fetched cross-origin at runtime. Never copy these in here — they blow up
+# the deploy and defeat the point of the failover.
+*.pmtiles
+photos/full/
+videos/
+data/route.full.gpx
+data/route.gpx
+data/route.light.gpx
+data/route.oldlongisland.gpx
+data/*.test-data.json
+
+# local/editor cruft
+*.backup-*
+.DS_Store
+node_modules/
