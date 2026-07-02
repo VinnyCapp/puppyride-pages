@@ -332,7 +332,7 @@
       <div class="embed-bar-status" id="embedStatusText">Loading...</div>
     </div>
   </div>
-  <a id="full-tracker-link" class="embed-full-btn" href="https://puppyride.vinnycapp.com/tracker.html" target="_blank">Full Tracker →</a>
+  <a id="full-tracker-link" class="embed-full-btn" href="tracker.html" target="_blank">Full Tracker →</a>
 </div>
 
 <!-- HEADER -->
@@ -567,7 +567,11 @@ const ROUTE_ELEV = [3.6,25.2,17.9,3.3,4.9,62.8,4.9,124.9,15.5,193.5,7.1,11.4,21.
 // (Access-Control-Allow-Origin) on the Dell for /data/*.json + /photos-api; SPOT already
 // sends permissive CORS, and cross-origin <img>/<video> need no CORS.
 const DELL_ORIGIN = 'https://puppyride.vinnycapp.com';
-const FULL_TRACKER_URL = 'https://puppyride.vinnycapp.com/tracker.html';
+// Canonical "open the full tracker" URL for the embed button + frame-bust. Origin-relative
+// so it points at THIS always-up copy, not the Dell origin (which may be down — the reason
+// this Pages copy exists). When the tracker is embedded, location.origin is the iframe's
+// own origin (the Pages deploy), so this stays correct.
+const FULL_TRACKER_URL = location.origin + '/tracker.html';
 const PHOTO_API = '/photos-api';
 
 // Pre-launch countdown. Jim rolls out 8:00 AM Pacific, June 6 2026. The -07:00 offset
@@ -597,8 +601,8 @@ if (EMBED_MODE) document.body.classList.add('embed-mode');
 // intended for a teaser/preview embed, not an interactive one.
 if (_params.get('embed') === 'true') {
   document.addEventListener('click', function() {
-    try { window.top.location.href = 'https://puppyride.vinnycapp.com/tracker.html'; }
-    catch(e) { window.open('https://puppyride.vinnycapp.com/tracker.html', '_blank'); }
+    try { window.top.location.href = FULL_TRACKER_URL; }
+    catch(e) { window.open(FULL_TRACKER_URL, '_blank'); }
   }, { once: true });
 }
 // Admin chrome — gear (settings) + pencil (edit) only render with ?admin=1.
