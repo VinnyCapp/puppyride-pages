@@ -39,10 +39,34 @@ See `.gitignore` — heavy assets must never be copied in.
 - Subsequent commits = the fallback edits (data Dell-first + SPOT fallback, media
   Dell-origin + placeholder, origin/URL rewrites, raster base-map + banner).
 
+## Dell-side requirement: CORS
+
+The Pages copy is a different origin from the Dell, so the browser needs the Dell to send
+`Access-Control-Allow-Origin` on the cross-origin fetches. Without it the failover still
+works — it just degrades everywhere (SPOT for track data, bundled snapshot for photos/blog,
+raster for the base map) — but to get the *fresh, full-history, vector* experience when the
+Dell is up, add CORS on the Dell nginx (`puppyride.vinnycapp.com`) for:
+
+| Path | Used by | Needs |
+|---|---|---|
+| `/data/*.json` (jim.json) | track data (2a) | `Access-Control-Allow-Origin` |
+| `/photos/manifest.json`, `/data/blog.json` | markers (2b) | `Access-Control-Allow-Origin` |
+| `/photos/full/*`, `/videos/*` | full-res media (2b) | none (`<img>`/`<video>` are CORS-free) |
+| `/puppyride-v2.pmtiles` | vector base map (2f) | ACAO **+ allow/expose `Range`** (range requests) |
+
+`/photos-api/*` admin POSTs (2e) also need a CORS preflight allowance if admin is used from
+the Pages copy — optional (admin is normally done on the Dell origin directly).
+
 ## Deploy
 
-`deploy.sh` (added at deploy time) stages the Wrangler push. Auth is **not** baked in
-— run `npx wrangler login` once, interactively, at first deploy.
+Run `./deploy.sh`. It refreshes the bundled fallback snapshots from the live source (never
+`tracker.html`/`index.html`) and pushes the bundle via Wrangler. Auth is **not** baked in:
 
-Source of truth: this git repo (mirror to GitHub). If the Dell disk dies and there's
-no repo, the Pages copy can't be rebuilt — hence repo-first.
+```bash
+npx wrangler login                                   # once, interactive
+npx wrangler pages project create puppyride-tracker  # first deploy only
+./deploy.sh
+```
+
+Source of truth: this git repo (mirrored to `github.com/VinnyCapp/puppyride-pages`). If the
+Dell disk dies and there's no repo, the Pages copy can't be rebuilt — hence repo-first.
