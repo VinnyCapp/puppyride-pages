@@ -621,8 +621,13 @@ let photoPassword = sessionStorage.getItem('puppyride_photo_pw') || '';
 // Satellite/Topo remain optional RASTER toggles (non-Stadia: ArcGIS / OpenTopoMap).
 // type:'pmtiles' -> protomaps-leaflet vector layer with the given flavor;
 // type:'raster'  -> plain L.tileLayer.
-const PMTILES_URL = 'puppyride-v2.pmtiles';   // same-origin, range-served by nginx (route-buffered corridor)
+// Vector basemap PMTiles (519 MB) live only on the Dell — NOT bundled with the Pages copy.
+// Absolute + range-served; needs CORS on the Dell (ACAO + allow/expose the Range headers)
+// for the cross-origin range requests. When it's unreachable (outage, or CORS not yet set)
+// the map falls back to a raster base + a banner — see ensureBaseMapReachable().
+const PMTILES_URL = DELL_ORIGIN + '/puppyride-v2.pmtiles';
 const PMTILES_MAXZOOM = 14;                // corridor extract max data zoom; overzoom past this
+const RASTER_FALLBACK_STYLE = 'satellite'; // used when the Dell vector basemap can't be reached
 const MAP_STYLES = [
   { id:'light', name:'Light', type:'pmtiles', flavor:'light' },
   { id:'dark',  name:'Dark',  type:'pmtiles', flavor:'dark' },
@@ -773,6 +778,7 @@ function init() {
 
   setMapStyle(currentStyle);
   buildStylePicker();
+  ensureBaseMapReachable();   // if the Dell vector basemap is down, swap to raster + banner
   if (!EMBED_MODE) buildTrackerToggle();
   loadGPX();
   loadAllTrackers();
@@ -786,10 +792,10 @@ function init() {
 // =============================================
 // MAP STYLES
 // =============================================
-function setMapStyle(styleId) {
+function setMapStyle(styleId, persist=true) {
   const s = MAP_STYLES.find(m => m.id === styleId) || MAP_STYLES[0];
   currentStyle = s.id;                       // normalize (handles stale localStorage ids)
-  localStorage.setItem('mapStyle', currentStyle);
+  if (persist) localStorage.setItem('mapStyle', currentStyle);  // raster fallback passes persist=false so it never clobbers the user's saved style
   if (tileLayer) { map.removeLayer(tileLayer); tileLayer = null; }
   if (s.type === 'pmtiles') {
     // Self-hosted Protomaps vector basemap. protomaps-leaflet handles range requests to
@@ -805,6 +811,34 @@ function setMapStyle(styleId) {
     tileLayer = L.tileLayer(s.url, { maxZoom:19 }).addTo(map);
   }
   document.querySelectorAll('.map-style-opt').forEach(b => b.classList.toggle('active', b.dataset.style === currentStyle));
+}
+
+// Cloudflare Pages failover for the basemap: the vector PMTiles base is Dell-only, so when
+// the Dell is unreachable (outage, or CORS not yet configured for the cross-origin range
+// requests) we swap to a raster base — ArcGIS/OpenTopoMap, always up — and tell the user
+// with a gentle banner. persist=false so we never overwrite their saved style; a later
+// reload re-probes and restores the vector base once the Dell is back.
+async function pmtilesReachable() {
+  try {
+    const r = await fetch(PMTILES_URL, { method:'GET', headers:{ Range:'bytes=0-0' } });
+    return r.ok || r.status === 206;
+  } catch(e) { return false; }
+}
+async function ensureBaseMapReachable() {
+  const s = MAP_STYLES.find(m => m.id === currentStyle);
+  if (!s || s.type !== 'pmtiles') return;    // raster styles are always reachable — no probe, no banner
+  if (await pmtilesReachable()) return;       // vector base is up — identical look, no banner
+  setMapStyle(RASTER_FALLBACK_STYLE, false);  // fall back without clobbering the saved preference
+  showMapFallbackBanner();
+}
+function showMapFallbackBanner() {
+  if (EMBED || EMBED_MODE) return;            // keep the slim iframe uncluttered; still falls back silently
+  if (document.getElementById('mapFallbackBanner')) return;
+  const b = document.createElement('div');
+  b.id = 'mapFallbackBanner';
+  b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:9999;max-width:90vw;background:#1c2530;color:#cfe0ef;border:1px solid #2c3a49;border-radius:10px;padding:9px 14px;font-family:\'Work Sans\',sans-serif;font-size:12.5px;line-height:1.4;box-shadow:0 4px 18px rgba(0,0,0,0.5);display:flex;align-items:center;gap:10px;';
+  b.innerHTML = '<span>🐾 The puppies are tidying up the map — showing a simpler view for now.</span><span style="cursor:pointer;opacity:0.6;font-weight:700;padding:0 2px;" onclick="this.parentNode.remove()">✕</span>';
+  document.body.appendChild(b);
 }
 
 function buildStylePicker() {
