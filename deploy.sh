@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploy the media-light PuppyRide tracker to Cloudflare Pages.
 #
-# AUTH IS NOT HANDLED HERE — run `npx wrangler login` ONCE, interactively, first.
+# AUTH IS NOT HANDLED HERE — run `npx wrangler@3 login` ONCE, interactively, first.
 # This script only refreshes the bundled fallback snapshots and pushes the bundle.
 #
 # First-ever deploy also needs the Pages project to exist:
-#   npx wrangler pages project create puppyride-tracker
+#   npx wrangler@3 pages project create puppyride-tracker  (wrangler@3: Dell is Node 18, wrangler@4 needs 22)
 set -euo pipefail
 
 REPO="/home/vin/puppyride-pages"
@@ -34,13 +34,13 @@ if ! git diff --quiet; then
 fi
 
 # 2) Preflight: confirm wrangler is authenticated. Does NOT log in.
-if ! npx --yes wrangler whoami >/dev/null 2>&1; then
+if ! npx --yes wrangler@3 whoami >/dev/null 2>&1; then
   echo "✗ wrangler is not authenticated." >&2
-  echo "  Run:  npx wrangler login      (once, interactive), then re-run this script." >&2
+  echo "  Run:  npx wrangler@3 login      (once, interactive), then re-run this script." >&2
   exit 1
 fi
 
 # 3) Deploy the media-light bundle.
 echo "→ deploying to Cloudflare Pages project '$PROJECT'…"
-npx --yes wrangler pages deploy . --project-name="$PROJECT" --commit-dirty=true
+npx --yes wrangler@3 pages deploy . --project-name="$PROJECT" --commit-dirty=true
 echo "✓ done."
